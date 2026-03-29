@@ -106,26 +106,26 @@ export default function SignIn() {
             ].map((item, i) => {
               const Icon = item.icon
               return (
-              <motion.div
-                key={item.label}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.4 + i * 0.12, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-                className="group rounded-2xl border border-white/8 bg-white/4 p-5 backdrop-blur-xl transition-all hover:border-primary/20 hover:bg-white/8"
-              >
-                <div className="flex items-start gap-4">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/12 text-primary transition-transform group-hover:scale-110">
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-baseline gap-2">
-                      <span className="money-text text-xl font-bold text-card-foreground">{item.stat}</span>
-                      <span className="text-sm text-muted-foreground">{item.label}</span>
+                <motion.div
+                  key={item.label}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.4 + i * 0.12, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+                  className="group rounded-2xl border border-white/8 bg-white/4 p-5 backdrop-blur-xl transition-all hover:border-primary/20 hover:bg-white/8"
+                >
+                  <div className="flex items-start gap-4">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/12 text-primary transition-transform group-hover:scale-110">
+                      <Icon className="h-5 w-5" />
                     </div>
-                    <p className="mt-1 text-xs text-muted-foreground/70">{item.desc}</p>
+                    <div className="min-w-0">
+                      <div className="flex items-baseline gap-2">
+                        <span className="money-text text-xl font-bold text-card-foreground">{item.stat}</span>
+                        <span className="text-sm text-muted-foreground">{item.label}</span>
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground/70">{item.desc}</p>
+                    </div>
                   </div>
-                </div>
-              </motion.div>
+                </motion.div>
               )
             })}
           </div>

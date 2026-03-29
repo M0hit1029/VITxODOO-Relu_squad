@@ -2,37 +2,45 @@ const prisma = require('../dbs/db');
 const { serializeRule } = require('../utils/serializers');
 const logger = require('../utils/logger');
 
+const ruleInclude = {
+	user: {
+		select: {
+			name: true,
+			email: true,
+		},
+	},
+	manager: {
+		select: {
+			id: true,
+			name: true,
+			email: true,
+			role: true,
+		},
+	},
+	approvers: {
+		include: {
+			user: {
+				select: {
+					id: true,
+					name: true,
+					email: true,
+					role: true,
+				},
+			},
+		},
+		orderBy: {
+			sequence_order: 'asc',
+		},
+	},
+};
+
 const getRules = async (req, res) => {
 	try {
 		const rules = await prisma.approvalRule.findMany({
 			where: {
 				company_id: req.user.company_id,
 			},
-			include: {
-				user: {
-					select: {
-						name: true,
-						email: true,
-					},
-				},
-				manager: {
-					select: {
-						name: true,
-					},
-				},
-				approvers: {
-					include: {
-						user: {
-							select: {
-								name: true,
-							},
-						},
-					},
-					orderBy: {
-						sequence_order: 'asc',
-					},
-				},
-			},
+			include: ruleInclude,
 			orderBy: {
 				created_at: 'desc',
 			},
@@ -58,6 +66,64 @@ const validateCompanyUser = async (userId, companyId) => {
 	});
 };
 
+const normalizeApprovers = (approvers = []) => {
+	if (!Array.isArray(approvers)) {
+		return [];
+	}
+
+	return approvers
+		.map((approver, index) => ({
+			user_id: approver.user_id || approver.userId,
+			sequence_order:
+				typeof approver.sequence_order !== 'undefined'
+					? Number(approver.sequence_order)
+					: typeof approver.sequenceOrder !== 'undefined'
+						? Number(approver.sequenceOrder)
+						: index + 1,
+			is_required:
+				typeof approver.is_required !== 'undefined'
+					? Boolean(approver.is_required)
+					: Boolean(approver.isRequired),
+		}))
+		.filter((approver) => approver.user_id);
+};
+
+const parseRulePayload = (body = {}) => {
+	const user_id = body.user_id || body.employeeId;
+	const description = body.description || body.name;
+	const manager_id =
+		typeof body.manager_id !== 'undefined'
+			? body.manager_id || null
+			: typeof body.managerId !== 'undefined'
+				? body.managerId || null
+				: undefined;
+	const is_manager_approver =
+		typeof body.is_manager_approver !== 'undefined'
+			? body.is_manager_approver
+			: body.isManagerRequired;
+	const mode = body.mode;
+	const approvers_sequence =
+		typeof body.approvers_sequence !== 'undefined'
+			? body.approvers_sequence
+			: mode === 'sequential';
+	const minApprovalPercentage =
+		typeof body.min_approval_percentage !== 'undefined'
+			? body.min_approval_percentage
+			: body.minApprovalPercentage;
+	const approvers = normalizeApprovers(body.approvers);
+
+	return {
+		user_id,
+		description,
+		manager_id,
+		is_manager_approver: Boolean(is_manager_approver),
+		approvers_sequence: Boolean(approvers_sequence),
+		min_approval_percentage:
+			Boolean(approvers_sequence) ? 100 : Number.isFinite(Number(minApprovalPercentage)) ? Number(minApprovalPercentage) : 100,
+		approvers,
+	};
+};
+
 const validateApprovers = async (approvers, companyId) => {
 	if (!Array.isArray(approvers) || approvers.length === 0) {
 		return true;
@@ -81,138 +147,132 @@ const validateApprovers = async (approvers, companyId) => {
 	return users.length === userIds.length;
 };
 
+const validateRulePayload = async ({
+	payload,
+	companyId,
+	existingRuleId = null,
+}) => {
+	if (!payload.user_id || !payload.description) {
+		return 'user_id and description are required.';
+	}
+
+	if (!Number.isInteger(payload.min_approval_percentage) || payload.min_approval_percentage < 0 || payload.min_approval_percentage > 100) {
+		return 'Minimum approval percentage must be between 0 and 100.';
+	}
+
+	const targetUser = await validateCompanyUser(payload.user_id, companyId);
+	if (!targetUser) {
+		return 'Invalid user_id for this company.';
+	}
+
+	if (targetUser.role !== 'employee') {
+		return 'Approval rules can only be assigned to employees.';
+	}
+
+	if (payload.manager_id !== undefined && payload.manager_id !== null) {
+		const manager = await validateCompanyUser(payload.manager_id, companyId);
+		if (!manager) {
+			return 'Invalid manager_id for this company.';
+		}
+
+		if (manager.id === payload.user_id) {
+			return 'An employee cannot be their own manager approver.';
+		}
+
+		if (!['manager', 'admin'].includes(manager.role)) {
+			return 'Manager override must be a manager or admin user.';
+		}
+	}
+
+	if (payload.is_manager_approver && !payload.manager_id && !targetUser.manager_id) {
+		return 'This rule requires a manager, but the employee has no manager assigned.';
+	}
+
+	const validApprovers = await validateApprovers(payload.approvers, companyId);
+	if (!validApprovers) {
+		return 'One or more approvers are invalid for this company.';
+	}
+
+	const approverIds = payload.approvers.map((approver) => approver.user_id);
+	if (new Set(approverIds).size !== approverIds.length) {
+		return 'Approvers cannot be duplicated in the same rule.';
+	}
+
+	if (payload.is_manager_approver) {
+		const effectiveManagerId = payload.manager_id || targetUser.manager_id;
+		if (effectiveManagerId && approverIds.includes(effectiveManagerId)) {
+			return 'Do not add the manager twice. Use the manager approver toggle instead.';
+		}
+	}
+
+	if (approverIds.includes(payload.user_id)) {
+		return 'An employee cannot approve their own expense.';
+	}
+
+	const existingRule = await prisma.approvalRule.findFirst({
+		where: {
+			company_id: companyId,
+			user_id: payload.user_id,
+			...(existingRuleId ? { NOT: { id: existingRuleId } } : {}),
+		},
+		select: {
+			id: true,
+		},
+	});
+
+	if (existingRule) {
+		return 'An approval rule already exists for this employee. Edit the existing rule instead.';
+	}
+
+	return null;
+};
+
+const fetchRule = async (ruleId) => {
+	return prisma.approvalRule.findUnique({
+		where: { id: ruleId },
+		include: ruleInclude,
+	});
+};
+
 const createRule = async (req, res) => {
 	try {
-		const {
-			user_id: requestUserId,
-			description: requestDescription,
-			manager_id: requestManagerId,
-			is_manager_approver: requestManagerApprover,
-			approvers_sequence: requestApproversSequence,
-			min_approval_percentage: requestMinApprovalPercentage,
-			approvers: requestApprovers,
-		} = req.body;
-		const user_id = requestUserId || req.body?.employeeId;
-		const description = requestDescription || req.body?.name;
-		const manager_id =
-			typeof requestManagerId !== 'undefined'
-				? requestManagerId || null
-				: typeof req.body?.managerId !== 'undefined'
-					? req.body?.managerId || null
-					: null;
-		const is_manager_approver =
-			typeof requestManagerApprover !== 'undefined'
-				? requestManagerApprover
-				: req.body?.isManagerRequired;
-		const approvers_sequence =
-			typeof requestApproversSequence !== 'undefined'
-				? requestApproversSequence
-				: req.body?.mode === 'sequential';
-		const min_approval_percentage =
-			typeof requestMinApprovalPercentage !== 'undefined'
-				? requestMinApprovalPercentage
-				: req.body?.minApprovalPercentage;
-		const approvers = Array.isArray(requestApprovers)
-			? requestApprovers
-			: Array.isArray(req.body?.approvers)
-				? req.body.approvers.map((approver, index) => ({
-						user_id: approver.user_id || approver.userId,
-						sequence_order:
-							typeof approver.sequence_order !== 'undefined'
-								? approver.sequence_order
-								: typeof approver.sequenceOrder !== 'undefined'
-									? approver.sequenceOrder
-									: index + 1,
-						is_required:
-							typeof approver.is_required !== 'undefined'
-								? approver.is_required
-								: approver.isRequired,
-				  }))
-				: [];
+		const payload = parseRulePayload(req.body);
+		const validationMessage = await validateRulePayload({
+			payload,
+			companyId: req.user.company_id,
+		});
 
-		if (!user_id || !description) {
-			logger.warn(`Rule creation failed: Missing user_id or description from admin ${req.user.id}`);
-			return res.status(400).json({ message: 'user_id and description are required.' });
-		}
-
-		const targetUser = await validateCompanyUser(user_id, req.user.company_id);
-		if (!targetUser) {
-			logger.warn(`Rule creation failed: Invalid user_id ${user_id} for company ${req.user.company_id}`);
-			return res.status(400).json({ message: 'Invalid user_id for this company.' });
-		}
-
-		if (typeof manager_id !== 'undefined' && manager_id !== null) {
-			const manager = await validateCompanyUser(manager_id, req.user.company_id);
-			if (!manager) {
-				logger.warn(`Rule creation failed: Invalid manager_id ${manager_id} for company ${req.user.company_id}`);
-				return res.status(400).json({ message: 'Invalid manager_id for this company.' });
-			}
-		}
-
-		if (Array.isArray(approvers) && approvers.length > 0) {
-			const validApprovers = await validateApprovers(approvers, req.user.company_id);
-			if (!validApprovers) {
-				logger.warn(`Rule creation failed: Invalid approvers listed by admin ${req.user.id}`);
-				return res.status(400).json({ message: 'One or more approvers are invalid for this company.' });
-			}
+		if (validationMessage) {
+			logger.warn(`Rule creation failed for admin ${req.user.id}: ${validationMessage}`);
+			return res.status(400).json({ message: validationMessage });
 		}
 
 		const rule = await prisma.approvalRule.create({
 			data: {
 				company_id: req.user.company_id,
-				user_id,
-				description,
-				manager_id: typeof manager_id === 'undefined' ? null : manager_id,
-				is_manager_approver:
-					typeof is_manager_approver === 'undefined' ? false : Boolean(is_manager_approver),
-				approvers_sequence:
-					typeof approvers_sequence === 'undefined' ? false : Boolean(approvers_sequence),
-				min_approval_percentage:
-					typeof min_approval_percentage === 'undefined' ? 100 : Number(min_approval_percentage),
+				user_id: payload.user_id,
+				description: payload.description,
+				manager_id: payload.manager_id || null,
+				is_manager_approver: payload.is_manager_approver,
+				approvers_sequence: payload.approvers_sequence,
+				min_approval_percentage: payload.min_approval_percentage,
 			},
 		});
 
-		if (Array.isArray(approvers) && approvers.length > 0) {
+		if (payload.approvers.length > 0) {
 			await prisma.approvalRuleApprover.createMany({
-				data: approvers.map((item) => ({
+				data: payload.approvers.map((approver, index) => ({
 					rule_id: rule.id,
-					user_id: item.user_id,
-					sequence_order: Number(item.sequence_order),
-					is_required: Boolean(item.is_required),
+					user_id: approver.user_id,
+					sequence_order: approver.sequence_order || index + 1,
+					is_required: approver.is_required,
 				})),
 			});
 		}
 
-		const fullRule = await prisma.approvalRule.findUnique({
-			where: { id: rule.id },
-			include: {
-				user: {
-					select: {
-						name: true,
-						email: true,
-					},
-				},
-				manager: {
-					select: {
-						name: true,
-					},
-				},
-				approvers: {
-					include: {
-						user: {
-							select: {
-								name: true,
-							},
-						},
-					},
-					orderBy: {
-						sequence_order: 'asc',
-					},
-				},
-			},
-		});
+		const fullRule = await fetchRule(rule.id);
 
-		logger.info(`Rule ${fullRule.id} created successfully by admin ${req.user.id}.`);
+		logger.info(`Rule ${rule.id} created successfully by admin ${req.user.id}.`);
 		return res.status(201).json(serializeRule(fullRule));
 	} catch (error) {
 		logger.error(`Failed to create rule by admin ${req.user?.id}: ${error.message}`);
@@ -234,154 +294,59 @@ const updateRule = async (req, res) => {
 			return res.status(404).json({ message: 'Rule not found.' });
 		}
 
-		const {
-			user_id: requestUserId,
-			description: requestDescription,
-			manager_id: requestManagerId,
-			is_manager_approver: requestManagerApprover,
-			approvers_sequence: requestApproversSequence,
-			min_approval_percentage: requestMinApprovalPercentage,
-			approvers: requestApprovers,
-		} = req.body;
-		const user_id = requestUserId || req.body?.employeeId;
-		const description = requestDescription || req.body?.name;
-		const manager_id =
-			typeof requestManagerId !== 'undefined'
-				? requestManagerId || null
-				: typeof req.body?.managerId !== 'undefined'
-					? req.body?.managerId || null
-					: undefined;
-		const is_manager_approver =
-			typeof requestManagerApprover !== 'undefined'
-				? requestManagerApprover
-				: req.body?.isManagerRequired;
-		const approvers_sequence =
-			typeof requestApproversSequence !== 'undefined'
-				? requestApproversSequence
-				: req.body?.mode === 'sequential';
-		const min_approval_percentage =
-			typeof requestMinApprovalPercentage !== 'undefined'
-				? requestMinApprovalPercentage
-				: req.body?.minApprovalPercentage;
-		const approvers = Array.isArray(requestApprovers)
-			? requestApprovers
-			: Array.isArray(req.body?.approvers)
-				? req.body.approvers.map((approver, index) => ({
-						user_id: approver.user_id || approver.userId,
-						sequence_order:
-							typeof approver.sequence_order !== 'undefined'
-								? approver.sequence_order
-								: typeof approver.sequenceOrder !== 'undefined'
-									? approver.sequenceOrder
-									: index + 1,
-						is_required:
-							typeof approver.is_required !== 'undefined'
-								? approver.is_required
-								: approver.isRequired,
-				  }))
-				: undefined;
+		const payload = parseRulePayload({
+			user_id: existingRule.user_id,
+			description: existingRule.description,
+			manager_id: existingRule.manager_id,
+			is_manager_approver: existingRule.is_manager_approver,
+			approvers_sequence: existingRule.approvers_sequence,
+			min_approval_percentage: existingRule.min_approval_percentage,
+			...req.body,
+		});
 
-		if (typeof user_id !== 'undefined') {
-			const targetUser = await validateCompanyUser(user_id, req.user.company_id);
-			if (!targetUser) {
-				logger.warn(`Rule update failed: Invalid user_id ${user_id} for company ${req.user.company_id}`);
-				return res.status(400).json({ message: 'Invalid user_id for this company.' });
-			}
-		}
+		const validationMessage = await validateRulePayload({
+			payload,
+			companyId: req.user.company_id,
+			existingRuleId: existingRule.id,
+		});
 
-		if (typeof manager_id !== 'undefined' && manager_id !== null) {
-			const manager = await validateCompanyUser(manager_id, req.user.company_id);
-			if (!manager) {
-				logger.warn(`Rule update failed: Invalid manager_id ${manager_id} for company ${req.user.company_id}`);
-				return res.status(400).json({ message: 'Invalid manager_id for this company.' });
-			}
-		}
-
-		if (Array.isArray(approvers) && approvers.length > 0) {
-			const validApprovers = await validateApprovers(approvers, req.user.company_id);
-			if (!validApprovers) {
-				logger.warn(`Rule update failed: Invalid approvers for rule ${req.params.id}`);
-				return res.status(400).json({ message: 'One or more approvers are invalid for this company.' });
-			}
-		}
-
-		const data = {};
-
-		if (typeof user_id !== 'undefined') {
-			data.user_id = user_id;
-		}
-		if (typeof description !== 'undefined') {
-			data.description = description;
-		}
-		if (typeof manager_id !== 'undefined') {
-			data.manager_id = manager_id;
-		}
-		if (typeof is_manager_approver !== 'undefined') {
-			data.is_manager_approver = Boolean(is_manager_approver);
-		}
-		if (typeof approvers_sequence !== 'undefined') {
-			data.approvers_sequence = Boolean(approvers_sequence);
-		}
-		if (typeof min_approval_percentage !== 'undefined') {
-			data.min_approval_percentage = Number(min_approval_percentage);
+		if (validationMessage) {
+			logger.warn(`Rule update failed for admin ${req.user.id}: ${validationMessage}`);
+			return res.status(400).json({ message: validationMessage });
 		}
 
 		await prisma.approvalRule.update({
 			where: {
 				id: req.params.id,
 			},
-			data,
+			data: {
+				user_id: payload.user_id,
+				description: payload.description,
+				manager_id: payload.manager_id || null,
+				is_manager_approver: payload.is_manager_approver,
+				approvers_sequence: payload.approvers_sequence,
+				min_approval_percentage: payload.min_approval_percentage,
+			},
 		});
 
-		if (Array.isArray(approvers)) {
-			await prisma.approvalRuleApprover.deleteMany({
-				where: {
-					rule_id: req.params.id,
-				},
-			});
+		await prisma.approvalRuleApprover.deleteMany({
+			where: {
+				rule_id: req.params.id,
+			},
+		});
 
-			if (approvers.length > 0) {
-				await prisma.approvalRuleApprover.createMany({
-					data: approvers.map((item) => ({
-						rule_id: req.params.id,
-						user_id: item.user_id,
-						sequence_order: Number(item.sequence_order),
-						is_required: Boolean(item.is_required),
-					})),
-				});
-			}
+		if (payload.approvers.length > 0) {
+			await prisma.approvalRuleApprover.createMany({
+				data: payload.approvers.map((approver, index) => ({
+					rule_id: req.params.id,
+					user_id: approver.user_id,
+					sequence_order: approver.sequence_order || index + 1,
+					is_required: approver.is_required,
+				})),
+			});
 		}
 
-		const updatedRule = await prisma.approvalRule.findUnique({
-			where: {
-				id: req.params.id,
-			},
-			include: {
-				user: {
-					select: {
-						name: true,
-						email: true,
-					},
-				},
-				manager: {
-					select: {
-						name: true,
-					},
-				},
-				approvers: {
-					include: {
-						user: {
-							select: {
-								name: true,
-							},
-						},
-					},
-					orderBy: {
-						sequence_order: 'asc',
-					},
-				},
-			},
-		});
+		const updatedRule = await fetchRule(req.params.id);
 
 		logger.info(`Rule ${req.params.id} updated successfully by admin ${req.user.id}.`);
 		return res.status(200).json(serializeRule(updatedRule));
@@ -406,6 +371,18 @@ const deleteRule = async (req, res) => {
 		if (!existingRule) {
 			logger.warn(`Rule deletion failed: Rule ${req.params.id} not found for company ${req.user.company_id}`);
 			return res.status(404).json({ message: 'Rule not found.' });
+		}
+
+		const linkedApprovalRequests = await prisma.approvalRequest.count({
+			where: {
+				rule_id: req.params.id,
+			},
+		});
+
+		if (linkedApprovalRequests > 0) {
+			return res.status(400).json({
+				message: 'This rule already has approval history and cannot be deleted. Edit it instead.',
+			});
 		}
 
 		await prisma.approvalRuleApprover.deleteMany({

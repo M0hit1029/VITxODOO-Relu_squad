@@ -122,7 +122,6 @@ function filterQueue(queue, filters = {}) {
 
 function toRulePayload(payload) {
   return {
-    name: payload.name,
     description: payload.description,
     employeeId: payload.employeeId,
     managerId: payload.managerId || null,

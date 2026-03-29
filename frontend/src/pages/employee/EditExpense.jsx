@@ -1,24 +1,39 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
+import { useNavigate, useParams } from 'react-router-dom'
 import { ExpenseForm } from '@/components/features/expenses/ExpenseForm'
 import { getCountries } from '@/services/currencyService'
 import { useExpenses } from '@/hooks/useExpenses'
 import { useAuthStore } from '@/store/authStore'
 
-export default function NewExpense() {
+export default function EditExpense() {
   const navigate = useNavigate()
-  const { persistExpense, submitCurrentExpense } = useExpenses()
+  const { id } = useParams()
+  const { currentExpense, fetchExpense, persistExpense, submitCurrentExpense } = useExpenses()
   const company = useAuthStore((state) => state.company)
   const [countries, setCountries] = useState([])
+
+  useEffect(() => {
+    if (id) {
+      fetchExpense(id).catch((error) => toast.error(error.message || 'Unable to load expense.'))
+    }
+  }, [fetchExpense, id])
 
   useEffect(() => {
     getCountries().then(setCountries).catch(() => setCountries([]))
   }, [])
 
+  const expense = currentExpense?.id === id ? currentExpense : null
+
+  useEffect(() => {
+    if (!expense || expense.status === 'draft') return
+    toast.error('Only draft expenses can be edited.')
+    navigate(`/expenses/${expense.id}`, { replace: true })
+  }, [expense, navigate])
+
   const handleSave = async (payload, shouldSubmit) => {
     try {
-      const saved = await persistExpense(payload)
+      const saved = await persistExpense({ ...payload, id })
       if (shouldSubmit && saved?.id) {
         await submitCurrentExpense(saved.id)
         toast.success('Expense submitted for approval.')
@@ -35,24 +50,13 @@ export default function NewExpense() {
     }
   }
 
-  if (!countries.length) {
-    return <div className="surface-card p-10 text-center text-muted-foreground">Loading expense form…</div>
-  }
-
-  const defaultValues = {
-    description: '',
-    expenseDate: new Date().toISOString().slice(0, 10),
-    category: 'travel',
-    paidBy: 'Self',
-    amount: 0,
-    currency: company?.baseCurrency ?? 'INR',
-    remarks: '',
-    status: 'draft',
+  if (!countries.length || !expense) {
+    return <div className="surface-card p-10 text-center text-muted-foreground">Loading expense form...</div>
   }
 
   return (
     <ExpenseForm
-      initialValues={defaultValues}
+      initialValues={expense}
       countries={countries}
       baseCurrency={company?.baseCurrency ?? 'INR'}
       onSave={handleSave}

@@ -4,6 +4,15 @@ import { sleep } from '@/lib/utils'
 import { BASE_COUNTRIES } from '@/lib/constants'
 import { normalizeCompany, normalizeUser } from '@/services/normalizers'
 
+function toClientError(error, fallbackMessage) {
+  const message =
+    error?.response?.data?.message ||
+    error?.message ||
+    fallbackMessage
+
+  return new Error(message)
+}
+
 function sanitizeUser(user) {
   const { password, ...safeUser } = user
   return safeUser
@@ -80,8 +89,12 @@ function normalizeSessionPayload(payload) {
 export async function login(credentials) {
   return withApiFallback(
     async () => {
-      const response = await api.post('/api/auth/login', credentials)
-      return normalizeSessionPayload(response.data)
+      try {
+        const response = await api.post('/api/auth/login', credentials)
+        return normalizeSessionPayload(response.data)
+      } catch (error) {
+        throw toClientError(error, 'Login failed.')
+      }
     },
     () => mockLogin(credentials),
   )
@@ -90,15 +103,19 @@ export async function login(credentials) {
 export async function signup(payload) {
   return withApiFallback(
     async () => {
-      const countryMatch = BASE_COUNTRIES.find((country) => country.name === payload.country)
-      const response = await api.post('/api/auth/signup', {
-        name: payload.fullName,
-        email: payload.email,
-        password: payload.password,
-        country: payload.country,
-        baseCurrency: countryMatch?.currencyCode ?? 'INR',
-      })
-      return normalizeSessionPayload(response.data)
+      try {
+        const countryMatch = BASE_COUNTRIES.find((country) => country.name === payload.country)
+        const response = await api.post('/api/auth/signup', {
+          name: payload.fullName,
+          email: payload.email,
+          password: payload.password,
+          country: payload.country,
+          baseCurrency: countryMatch?.currencyCode ?? 'INR',
+        })
+        return normalizeSessionPayload(response.data)
+      } catch (error) {
+        throw toClientError(error, 'Signup failed.')
+      }
     },
     () => mockSignup(payload),
   )
@@ -107,8 +124,12 @@ export async function signup(payload) {
 export async function forgotPassword(payload) {
   return withApiFallback(
     async () => {
-      const response = await api.post('/api/auth/forgot-password', payload)
-      return response.data
+      try {
+        const response = await api.post('/api/auth/forgot-password', payload)
+        return response.data
+      } catch (error) {
+        throw toClientError(error, 'Failed to send reset email.')
+      }
     },
     async () => {
       await sleep(900)
@@ -120,11 +141,15 @@ export async function forgotPassword(payload) {
 export async function resetPassword(payload) {
   return withApiFallback(
     async () => {
-      const response = await api.post('/api/auth/reset-password', {
-        token: payload.token,
-        newPassword: payload.password,
-      })
-      return response.data
+      try {
+        const response = await api.post('/api/auth/reset-password', {
+          token: payload.token,
+          newPassword: payload.password,
+        })
+        return response.data
+      } catch (error) {
+        throw toClientError(error, 'Reset password failed.')
+      }
     },
     async () => {
       await sleep(1000)

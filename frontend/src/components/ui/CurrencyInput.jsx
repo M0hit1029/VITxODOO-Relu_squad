@@ -9,6 +9,7 @@ export function CurrencyInput({
   onCurrencyChange,
   currencies,
   className,
+  disabled = false,
 }) {
   return (
     <div
@@ -23,6 +24,7 @@ export function CurrencyInput({
         step="0.01"
         className="rounded-none border-0 bg-transparent shadow-none focus:ring-0"
         value={amount}
+        disabled={disabled}
         onChange={(event) => onAmountChange(event.target.value)}
         placeholder="0.00"
       />
@@ -38,6 +40,7 @@ export function CurrencyInput({
           }))}
           placeholder="Currency"
           className="rounded-none border-0 bg-transparent shadow-none focus:ring-0"
+          disabled={disabled}
         />
       </div>
     </div>

@@ -126,21 +126,21 @@ export default function SignUp() {
             ].map((item, i) => {
               const Icon = item.icon
               return (
-              <motion.div
-                key={item.title}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.4 + i * 0.1, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-                className="group flex items-start gap-4 rounded-2xl border border-white/8 bg-white/4 p-4 backdrop-blur-xl transition-all hover:border-primary/20 hover:bg-white/8"
-              >
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/12 text-primary transition-transform group-hover:scale-110">
-                  <Icon className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-card-foreground">{item.title}</p>
-                  <p className="mt-0.5 text-xs text-muted-foreground/70">{item.desc}</p>
-                </div>
-              </motion.div>
+                <motion.div
+                  key={item.title}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.4 + i * 0.1, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+                  className="group flex items-start gap-4 rounded-2xl border border-white/8 bg-white/4 p-4 backdrop-blur-xl transition-all hover:border-primary/20 hover:bg-white/8"
+                >
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/12 text-primary transition-transform group-hover:scale-110">
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-card-foreground">{item.title}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground/70">{item.desc}</p>
+                  </div>
+                </motion.div>
               )
             })}
           </div>
@@ -257,16 +257,14 @@ export default function SignUp() {
                   {[0, 1, 2].map((index) => (
                     <div
                       key={index}
-                      className={`h-1.5 flex-1 rounded-full transition-all duration-500 ${
-                        index < strength ? strengthColors[strength - 1] : 'bg-muted/40'
-                      }`}
+                      className={`h-1.5 flex-1 rounded-full transition-all duration-500 ${index < strength ? strengthColors[strength - 1] : 'bg-muted/40'
+                        }`}
                     />
                   ))}
                 </div>
                 {strength > 0 && (
-                  <span className={`text-[11px] font-semibold ${
-                    strength === 1 ? 'text-destructive' : strength === 2 ? 'text-warning' : 'text-success'
-                  }`}>
+                  <span className={`text-[11px] font-semibold ${strength === 1 ? 'text-destructive' : strength === 2 ? 'text-warning' : 'text-success'
+                    }`}>
                     {strengthLabels[strength - 1]}
                   </span>
                 )}
@@ -326,10 +324,10 @@ export default function SignUp() {
                 ].map((item) => {
                   const Icon = item.icon
                   return (
-                  <div key={item.text} className="flex items-center gap-1.5 text-[11px] text-muted-foreground/60">
-                    <Icon className="h-3.5 w-3.5" />
-                    {item.text}
-                  </div>
+                    <div key={item.text} className="flex items-center gap-1.5 text-[11px] text-muted-foreground/60">
+                      <Icon className="h-3.5 w-3.5" />
+                      {item.text}
+                    </div>
                   )
                 })}
               </div>

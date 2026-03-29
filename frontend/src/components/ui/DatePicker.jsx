@@ -17,7 +17,7 @@ import { useMemo, useState } from 'react'
 import { Button } from '@/components/ui/Button'
 import { cn, formatDate } from '@/lib/utils'
 
-export function DatePicker({ value, onChange, disableFuture = false, placeholder = 'Pick a date' }) {
+export function DatePicker({ value, onChange, disableFuture = false, placeholder = 'Pick a date', disabled = false }) {
   const [month, setMonth] = useState(value ? new Date(value) : new Date())
   const selectedDate = value ? new Date(value) : null
 
@@ -30,7 +30,7 @@ export function DatePicker({ value, onChange, disableFuture = false, placeholder
   return (
     <Popover.Root>
       <Popover.Trigger asChild>
-        <Button variant="outline" className="w-full justify-between rounded-xl px-3.5 font-normal">
+        <Button variant="outline" className="w-full justify-between rounded-xl px-3.5 font-normal" disabled={disabled}>
           <span className={selectedDate ? 'text-foreground' : 'text-muted-foreground'}>
             {selectedDate ? formatDate(selectedDate) : placeholder}
           </span>
@@ -60,7 +60,7 @@ export function DatePicker({ value, onChange, disableFuture = false, placeholder
           </div>
           <div className="grid grid-cols-7 gap-1">
             {days.map((day) => {
-              const isDisabled = disableFuture && isAfter(day, new Date())
+              const isDisabled = disabled || (disableFuture && isAfter(day, new Date()))
               const selected = selectedDate ? isSameDay(day, selectedDate) : false
               return (
                 <button

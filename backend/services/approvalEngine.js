@@ -1,7 +1,24 @@
 const prisma = require('../dbs/db');
-const logger = require('../utils/logger');
+
+const createEngineError = (code, message) => {
+	const error = new Error(message);
+	error.code = code;
+	return error;
+};
 
 const createApprovalRequest = async (expenseId, ruleId, approver) => {
+	const existingRequest = await prisma.approvalRequest.findFirst({
+		where: {
+			expense_id: expenseId,
+			approver_id: approver.user_id,
+			sequence_order: approver.sequence_order,
+		},
+	});
+
+	if (existingRequest) {
+		return existingRequest;
+	}
+
 	return prisma.approvalRequest.create({
 		data: {
 			expense_id: expenseId,
@@ -28,30 +45,67 @@ const getSystemActorId = async (companyId, fallbackActorId) => {
 	return adminUser?.id || fallbackActorId;
 };
 
-const updateExpenseStatus = async (expenseId, status, companyId, fallbackActorId) => {
+const updateExpenseStatus = async (
+	expenseId,
+	status,
+	companyId,
+	fallbackActorId,
+	note = 'System auto-resolved',
+) => {
 	await prisma.expense.update({
 		where: { id: expenseId },
 		data: { status },
 	});
 
+	await prisma.approvalRequest.updateMany({
+		where: {
+			expense_id: expenseId,
+			status: 'pending',
+		},
+		data: {
+			status,
+			comments: note,
+			decided_at: new Date(),
+		},
+	});
+
 	const actorId = await getSystemActorId(companyId, fallbackActorId);
 
 	if (actorId) {
-		logger.info(`Auto-resolving expense ${expenseId} status to ${status} by system actor ${actorId}`);
 		await prisma.expenseLog.create({
 			data: {
 				expense_id: expenseId,
 				actor_id: actorId,
 				action: status,
-				note: 'System auto-resolved',
+				note,
 			},
 		});
 	}
 };
 
+const normalizeQueue = (queue, employeeId) => {
+	const seenApprovers = new Set();
+
+	return queue
+		.filter((approver) => approver?.user_id && approver.user_id !== employeeId)
+		.sort((left, right) => left.sequence_order - right.sequence_order)
+		.reduce((result, approver, index) => {
+			if (seenApprovers.has(approver.user_id)) {
+				return result;
+			}
+
+			seenApprovers.add(approver.user_id);
+			result.push({
+				user_id: approver.user_id,
+				sequence_order: approver.sequence_order ?? index,
+				is_required: Boolean(approver.is_required),
+			});
+			return result;
+		}, []);
+};
+
 const buildApproverQueue = (rule, expense) => {
 	const queue = [];
-	let managerPrepended = false;
 
 	if (rule.is_manager_approver) {
 		const managerUserId = rule.manager_id || expense.employee.manager_id;
@@ -61,26 +115,40 @@ const buildApproverQueue = (rule, expense) => {
 				sequence_order: 0,
 				is_required: true,
 			});
-			managerPrepended = true;
 		}
 	}
 
-	const sortedRuleApprovers = [...rule.approvers].sort(
-		(a, b) => a.sequence_order - b.sequence_order
-	);
-
-	for (const approver of sortedRuleApprovers) {
+	for (const approver of rule.approvers) {
 		queue.push({
 			user_id: approver.user_id,
-			sequence_order: managerPrepended ? approver.sequence_order + 1 : approver.sequence_order,
+			sequence_order: approver.sequence_order,
 			is_required: approver.is_required,
 		});
 	}
 
-	return queue;
+	return normalizeQueue(queue, expense.employee_id);
 };
 
-const triggerApprovalFlow = async (expenseId) => {
+const getRuleForExpense = async (expense) => {
+	return prisma.approvalRule.findFirst({
+		where: {
+			company_id: expense.company_id,
+			user_id: expense.employee_id,
+		},
+		include: {
+			approvers: {
+				orderBy: {
+					sequence_order: 'asc',
+				},
+			},
+		},
+		orderBy: {
+			created_at: 'desc',
+		},
+	});
+};
+
+const prepareApprovalFlow = async (expenseId) => {
 	const expense = await prisma.expense.findUnique({
 		where: { id: expenseId },
 		include: {
@@ -90,103 +158,147 @@ const triggerApprovalFlow = async (expenseId) => {
 					manager_id: true,
 				},
 			},
-			company: {
-				select: {
-					id: true,
-				},
-			},
 		},
 	});
 
 	if (!expense) {
-		return;
+		throw createEngineError('EXPENSE_NOT_FOUND', 'Expense not found.');
 	}
 
-	const rule = await prisma.approvalRule.findFirst({
-		where: {
-			user_id: expense.employee_id,
-		},
-		include: {
-			approvers: {
-				orderBy: {
-					sequence_order: 'asc',
-				},
-			},
-			manager: {
-				select: {
-					id: true,
-				},
-			},
-		},
-	});
+	const rule = await getRuleForExpense(expense);
 
 	if (!rule) {
-		logger.info(`Approval engine: No rule found for employee ${expense.employee_id}, falling back to draft for expense ${expense.id}`);
-		await prisma.expense.update({
-			where: { id: expense.id },
-			data: { status: 'draft' },
-		});
-
-		await prisma.expenseLog.create({
-			data: {
-				expense_id: expense.id,
-				actor_id: expense.employee_id,
-				action: 'no_rule',
-				note: 'Submission paused: no approval rule configured for this employee. Contact your admin.',
-			},
-		});
-
-		return;
+		throw createEngineError(
+			'NO_APPROVAL_ROUTE',
+			'No approval rule exists for this employee. Ask an admin to configure one before submitting.',
+		);
 	}
-
-	const approverQueue = buildApproverQueue(rule, expense).filter(
-		(approver) => approver.user_id !== expense.employee_id
-	);
 
 	if (rule.is_manager_approver && !rule.manager_id && !expense.employee.manager_id) {
-		await prisma.expenseLog.create({
-			data: {
-				expense_id: expense.id,
-				actor_id: expense.employee_id,
-				action: 'warning',
-				note: 'Manager approver step skipped: no manager configured.',
-			},
-		});
+		throw createEngineError(
+			'MANAGER_REQUIRED_MISSING',
+			'This approval rule requires a manager, but no manager is assigned.',
+		);
 	}
 
-	if (approverQueue.length === 0) {
-		await prisma.expense.update({
-			where: { id: expense.id },
-			data: { status: 'approved' },
-		});
+	return {
+		expense,
+		rule,
+		approverQueue: buildApproverQueue(rule, expense),
+	};
+};
 
-		const actorId = await getSystemActorId(expense.company_id, expense.employee_id);
+const triggerApprovalFlow = async (expenseId, preparedFlow = null) => {
+	const flow = preparedFlow || (await prepareApprovalFlow(expenseId));
+	const { expense, rule, approverQueue } = flow;
 
-		if (actorId) {
-			logger.info(`Approval engine: Auto-approved expense ${expense.id} since no approvers were left in the queue.`);
-			await prisma.expenseLog.create({
-				data: {
-					expense_id: expense.id,
-					actor_id: actorId,
-					action: 'approved',
-					note: 'Auto-approved: no eligible approvers.',
-				},
-			});
-		}
-
+	if (!approverQueue.length) {
+		await updateExpenseStatus(
+			expense.id,
+			'approved',
+			expense.company_id,
+			expense.employee_id,
+			'Auto-approved: no eligible approvers were available for this expense.',
+		);
 		return;
 	}
 
 	if (rule.approvers_sequence) {
-		logger.info(`Approval engine: Sequential approval active. Creating request for first approver in queue for expense ${expense.id}`);
 		await createApprovalRequest(expense.id, rule.id, approverQueue[0]);
 		return;
 	}
 
-	logger.info(`Approval engine: Parallel approval active. Creating all parallel requests for expense ${expense.id}`);
 	await Promise.all(
-		approverQueue.map((approver) => createApprovalRequest(expense.id, rule.id, approver))
+		approverQueue.map((approver) => createApprovalRequest(expense.id, rule.id, approver)),
 	);
+};
+
+const evaluateSequentialExpense = async (expense, rule, approvalRequests) => {
+	const rejectedRequest = approvalRequests.find((request) => request.status === 'rejected');
+	if (rejectedRequest) {
+		await updateExpenseStatus(
+			expense.id,
+			'rejected',
+			expense.company_id,
+			expense.employee_id,
+			'Rejected in sequential approval flow.',
+		);
+		return;
+	}
+
+	const pendingRequest = approvalRequests.find((request) => request.status === 'pending');
+	if (pendingRequest) {
+		return;
+	}
+
+	const queue = buildApproverQueue(rule, expense);
+	const nextApprover = queue.find((approver) => {
+		return !approvalRequests.some(
+			(request) =>
+				request.approver_id === approver.user_id &&
+				request.sequence_order === approver.sequence_order,
+		);
+	});
+
+	if (nextApprover) {
+		await createApprovalRequest(expense.id, rule.id, nextApprover);
+		return;
+	}
+
+	if (approvalRequests.length === queue.length && approvalRequests.every((request) => request.status === 'approved')) {
+		await updateExpenseStatus(
+			expense.id,
+			'approved',
+			expense.company_id,
+			expense.employee_id,
+			'All sequential approvers approved this expense.',
+		);
+	}
+};
+
+const evaluateParallelExpense = async (expense, rule, approvalRequests) => {
+	const requiredRejected = approvalRequests.some(
+		(request) => request.is_required && request.status === 'rejected',
+	);
+
+	if (requiredRejected) {
+		await updateExpenseStatus(
+			expense.id,
+			'rejected',
+			expense.company_id,
+			expense.employee_id,
+			'A required approver rejected this expense.',
+		);
+		return;
+	}
+
+	const requiredRequests = approvalRequests.filter((request) => request.is_required);
+	const allRequiredApproved = requiredRequests.every((request) => request.status === 'approved');
+	const approvedRequests = approvalRequests.filter((request) => request.status === 'approved');
+	const pendingRequests = approvalRequests.filter((request) => request.status === 'pending');
+	const totalApprovers = approvalRequests.length;
+	const approvalPercentage = totalApprovers > 0 ? (approvedRequests.length / totalApprovers) * 100 : 0;
+
+	if (allRequiredApproved && approvalPercentage >= rule.min_approval_percentage) {
+		await updateExpenseStatus(
+			expense.id,
+			'approved',
+			expense.company_id,
+			expense.employee_id,
+			'Approval threshold reached for this expense.',
+		);
+		return;
+	}
+
+	if (pendingRequests.length === 0) {
+		await updateExpenseStatus(
+			expense.id,
+			'rejected',
+			expense.company_id,
+			expense.employee_id,
+			'Approval threshold was not met for this expense.',
+		);
+	}
 };
 
 const evaluateExpenseStatus = async (expenseId, ruleId) => {
@@ -227,77 +339,21 @@ const evaluateExpenseStatus = async (expenseId, ruleId) => {
 		where: {
 			expense_id: expenseId,
 		},
+		orderBy: {
+			sequence_order: 'asc',
+		},
 	});
 
-	const pendingRequests = approvalRequests.filter((request) => request.status === 'pending');
-	const approvedRequests = approvalRequests.filter((request) => request.status === 'approved');
-	const rejectedRequests = approvalRequests.filter((request) => request.status === 'rejected');
+	if (!approvalRequests.length) {
+		return;
+	}
 
 	if (rule.approvers_sequence) {
-		const requiredRejectedInSequential = rejectedRequests.some((request) => request.is_required);
-		if (requiredRejectedInSequential) {
-			await updateExpenseStatus(expenseId, 'rejected', expense.company_id, expense.employee_id);
-			return;
-		}
-
-		if (pendingRequests.length === 0) {
-			const queue = buildApproverQueue(rule, expense).filter(
-				(approver) => approver.user_id !== expense.employee_id
-			);
-
-			const highestSequence = approvalRequests.reduce(
-				(max, request) => (request.sequence_order > max ? request.sequence_order : max),
-				-1
-			);
-
-			const nextApprover = queue.find((approver) => {
-				if (approver.sequence_order <= highestSequence) {
-					return false;
-				}
-
-				const alreadyCreated = approvalRequests.some(
-					(request) =>
-						request.approver_id === approver.user_id &&
-						request.sequence_order === approver.sequence_order
-				);
-
-				return !alreadyCreated;
-			});
-
-			if (nextApprover) {
-				await createApprovalRequest(expenseId, ruleId, nextApprover);
-				return;
-			}
-		}
-	}
-
-	const requiredRejected = approvalRequests.some(
-		(request) => request.is_required && request.status === 'rejected'
-	);
-
-	if (requiredRejected) {
-		await updateExpenseStatus(expenseId, 'rejected', expense.company_id, expense.employee_id);
+		await evaluateSequentialExpense(expense, rule, approvalRequests);
 		return;
 	}
 
-	const requiredRequests = approvalRequests.filter((request) => request.is_required);
-	const allRequiredApproved = requiredRequests.every((request) => request.status === 'approved');
-	const total = approvalRequests.length;
-	const approved = approvedRequests.length;
-	const approvalPercentage = total > 0 ? (approved / total) * 100 : 0;
-	const percentageMet = approvalPercentage >= rule.min_approval_percentage;
-	const allDecided = pendingRequests.length === 0;
-
-	if (allRequiredApproved && percentageMet) {
-		logger.info(`Approval engine: Expense ${expenseId} completely approved.`);
-		await updateExpenseStatus(expenseId, 'approved', expense.company_id, expense.employee_id);
-		return;
-	}
-
-	if (allDecided && (!allRequiredApproved || !percentageMet)) {
-		logger.info(`Approval engine: Expense ${expenseId} got rejected as minimum approvals/requirements were not met.`);
-		await updateExpenseStatus(expenseId, 'rejected', expense.company_id, expense.employee_id);
-	}
+	await evaluateParallelExpense(expense, rule, approvalRequests);
 };
 
 const handleApprovalDecision = async (approvalRequestId, decision, comment, actorId) => {
@@ -312,15 +368,15 @@ const handleApprovalDecision = async (approvalRequestId, decision, comment, acto
 	});
 
 	if (!request) {
-		throw new Error('Approval request not found');
+		throw createEngineError('APPROVAL_NOT_FOUND', 'Approval request not found.');
 	}
 
-	if (request.status !== 'pending') {
-		throw new Error('Already decided');
+	if (request.status !== 'pending' || request.expense.status !== 'submitted') {
+		throw createEngineError('ALREADY_DECIDED', 'Already decided');
 	}
 
-	if (decision !== 'approved' && decision !== 'rejected') {
-		throw new Error('Invalid decision');
+	if (!['approved', 'rejected'].includes(decision)) {
+		throw createEngineError('INVALID_DECISION', 'Invalid decision');
 	}
 
 	await prisma.approvalRequest.update({
@@ -347,6 +403,7 @@ const handleApprovalDecision = async (approvalRequestId, decision, comment, acto
 };
 
 module.exports = {
+	prepareApprovalFlow,
 	triggerApprovalFlow,
 	handleApprovalDecision,
 };

@@ -23,11 +23,20 @@ export function Stepper({ steps }) {
             <p className="text-sm font-medium text-foreground">{step.label}</p>
           </div>
           {index < steps.length - 1 && (
-            <motion.div
-              initial={{ scaleX: 0 }}
-              animate={{ scaleX: 1 }}
-              className="hidden h-px flex-1 origin-left bg-border md:block"
-            />
+            <div className="hidden h-px flex-1 overflow-hidden rounded-full bg-border md:block">
+              <motion.div
+                initial={{ scaleX: 0 }}
+                animate={{
+                  scaleX: step.status === 'complete' ? 1 : step.status === 'current' ? 0.5 : 0,
+                }}
+                transition={{ duration: 0.3, ease: 'easeOut' }}
+                className={cn(
+                  'h-full origin-left',
+                  step.status === 'complete' && 'bg-success',
+                  step.status === 'current' && 'bg-primary',
+                )}
+              />
+            </div>
           )}
         </div>
       ))}

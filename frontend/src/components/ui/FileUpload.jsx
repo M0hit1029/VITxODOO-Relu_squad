@@ -10,6 +10,7 @@ export function FileUpload({
   progress = 0,
   accept = 'image/png,image/jpeg,application/pdf',
   maxSizeMb = 10,
+  disabled = false,
 }) {
   const [dragging, setDragging] = useState(false)
 
@@ -19,6 +20,7 @@ export function FileUpload({
   }, [value])
 
   const handleFile = (file) => {
+    if (disabled) return
     if (!file) return
     if (file.size > maxSizeMb * 1024 * 1024) return
     onChange(file)
@@ -30,6 +32,7 @@ export function FileUpload({
         className={cn(
           'flex min-h-[180px] cursor-pointer flex-col items-center justify-center rounded-3xl border border-dashed border-primary/35 bg-primary/4 p-6 text-center transition-all',
           dragging && 'amber-glow border-primary/60 bg-primary/8',
+          disabled && 'cursor-not-allowed opacity-60',
         )}
         onDragOver={(event) => {
           event.preventDefault()
@@ -46,6 +49,7 @@ export function FileUpload({
           type="file"
           accept={accept}
           className="hidden"
+          disabled={disabled}
           onChange={(event) => handleFile(event.target.files?.[0])}
         />
         <UploadCloud className="mb-3 h-9 w-9 text-primary" />
@@ -71,7 +75,7 @@ export function FileUpload({
               </div>
             )}
           </div>
-          <Button variant="ghost" size="icon" onClick={() => onChange(null)}>
+          <Button variant="ghost" size="icon" onClick={() => onChange(null)} disabled={disabled}>
             <X className="h-4 w-4" />
           </Button>
         </div>

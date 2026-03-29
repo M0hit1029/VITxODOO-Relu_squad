@@ -43,6 +43,11 @@ export function ExpenseForm({ initialValues, countries, baseCurrency = 'INR', on
   const currency = form.watch('currency')
   const { convertedAmount, isLoading, error } = useCurrency(currency, baseCurrency, amount)
   const status = initialValues?.status ?? 'draft'
+  const isDraft = status === 'draft'
+
+  useEffect(() => {
+    form.reset(initialValues)
+  }, [form, initialValues])
 
   useEffect(() => {
     if (file) scan(file).catch(() => toast.error('Could not scan receipt.'))
@@ -114,7 +119,13 @@ export function ExpenseForm({ initialValues, countries, baseCurrency = 'INR', on
           <CardTitle>Receipt</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <ReceiptUpload file={file} onFileChange={setFile} isScanning={isScanning} progress={progress} />
+          <ReceiptUpload
+            file={file}
+            onFileChange={setFile}
+            isScanning={isScanning}
+            progress={progress}
+            disabled={!isDraft || form.formState.isSubmitting}
+          />
           {result && <OCRPreviewPanel result={result} onApply={applyOcrToForm} />}
         </CardContent>
       </Card>
@@ -126,7 +137,7 @@ export function ExpenseForm({ initialValues, countries, baseCurrency = 'INR', on
         <CardContent className="space-y-5">
           <div className="space-y-2">
             <label className="text-sm font-medium text-card-foreground">Description</label>
-            <Input multiline rows={4} {...form.register('description')} />
+            <Input multiline rows={4} disabled={!isDraft || form.formState.isSubmitting} {...form.register('description')} />
             <p className="text-xs text-destructive">{form.formState.errors.description?.message}</p>
           </div>
           <div className="form-grid">
@@ -136,6 +147,7 @@ export function ExpenseForm({ initialValues, countries, baseCurrency = 'INR', on
                 value={form.watch('expenseDate')}
                 onChange={(value) => form.setValue('expenseDate', value)}
                 disableFuture
+                disabled={!isDraft || form.formState.isSubmitting}
               />
               <p className="text-xs text-destructive">{form.formState.errors.expenseDate?.message}</p>
             </div>
@@ -149,6 +161,7 @@ export function ExpenseForm({ initialValues, countries, baseCurrency = 'INR', on
                   label: category.label,
                   flag: category.emoji,
                 }))}
+                disabled={!isDraft || form.formState.isSubmitting}
               />
             </div>
             <div className="space-y-2">
@@ -157,6 +170,7 @@ export function ExpenseForm({ initialValues, countries, baseCurrency = 'INR', on
                 value={form.watch('paidBy')}
                 onValueChange={(value) => form.setValue('paidBy', value)}
                 options={PAID_BY_OPTIONS.map((option) => ({ value: option, label: option }))}
+                disabled={!isDraft || form.formState.isSubmitting}
               />
             </div>
             <div className="space-y-2 md:col-span-2">
@@ -167,6 +181,7 @@ export function ExpenseForm({ initialValues, countries, baseCurrency = 'INR', on
                 currency={currency}
                 onCurrencyChange={(value) => form.setValue('currency', value)}
                 currencies={currencyOptions}
+                disabled={!isDraft || form.formState.isSubmitting}
               />
               <p className="text-xs text-destructive">{form.formState.errors.amount?.message}</p>
             </div>
@@ -180,27 +195,39 @@ export function ExpenseForm({ initialValues, countries, baseCurrency = 'INR', on
           />
           <div className="space-y-2">
             <label className="text-sm font-medium text-card-foreground">Remarks</label>
-            <Input multiline rows={4} {...form.register('remarks')} placeholder="Optional notes for reviewers" />
+            <Input
+              multiline
+              rows={4}
+              disabled={!isDraft || form.formState.isSubmitting}
+              {...form.register('remarks')}
+              placeholder="Optional notes for reviewers"
+            />
           </div>
-          <div className="flex flex-wrap justify-end gap-3">
-            <Button
-              variant="outline"
-              onClick={handleDraftSave}
-              disabled={form.formState.isSubmitting}
-              loading={activeAction === 'draft'}
-              loadingText="Saving draft..."
-            >
-              Save as Draft
-            </Button>
-            <Button onClick={() => setConfirmOpen(true)} disabled={form.formState.isSubmitting}>
-              Submit for Approval
-            </Button>
-          </div>
+          {isDraft ? (
+            <div className="flex flex-wrap justify-end gap-3">
+              <Button
+                variant="outline"
+                onClick={handleDraftSave}
+                disabled={form.formState.isSubmitting}
+                loading={activeAction === 'draft'}
+                loadingText="Saving draft..."
+              >
+                Save as Draft
+              </Button>
+              <Button onClick={() => setConfirmOpen(true)} disabled={form.formState.isSubmitting}>
+                Submit for Approval
+              </Button>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              This expense has been submitted and is now read-only.
+            </p>
+          )}
         </CardContent>
       </Card>
 
       <Modal
-        open={confirmOpen}
+        open={isDraft && confirmOpen}
         onOpenChange={(nextOpen) => {
           if (activeAction === 'submit') return
           setConfirmOpen(nextOpen)

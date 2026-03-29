@@ -1,5 +1,6 @@
 const prisma = require('../dbs/db');
 const currencyService = require('../services/currencyService');
+const approvalEngine = require('../services/approvalEngine');
 const upload = require('../src/config/upload');
 const { getBackendCategory, serializeExpense } = require('../utils/serializers');
 const logger = require('../utils/logger');
@@ -27,7 +28,11 @@ const canAccessExpense = (user, expense) => {
 	}
 
 	if (user.role === 'manager') {
-		return expense.employee_id === user.id || expense.employee?.manager_id === user.id;
+		return (
+			expense.employee_id === user.id ||
+			expense.employee?.manager_id === user.id ||
+			expense.approval_requests?.some((request) => request.approver_id === user.id)
+		);
 	}
 
 	return false;
@@ -109,17 +114,10 @@ const getExpenses = async (req, res) => {
 		const companyId = req.user.company_id;
 		let where = { company_id: companyId };
 
-		if (req.user.role === 'employee') {
+		if (req.user.role === 'employee' || req.user.role === 'manager') {
 			where = {
 				employee_id: req.user.id,
 				company_id: companyId,
-			};
-		}
-
-		if (req.user.role === 'manager') {
-			where = {
-				company_id: companyId,
-				OR: [{ employee_id: req.user.id }, { employee: { manager_id: req.user.id } }],
 			};
 		}
 
@@ -373,6 +371,7 @@ const submitExpense = async (req, res) => {
 
 		let converted = null;
 		let logNote = null;
+		let approvalFlow = null;
 
 		try {
 			converted = await currencyService.convertCurrency(
@@ -388,6 +387,25 @@ const submitExpense = async (req, res) => {
 			} else {
 				throw error;
 			}
+		}
+
+		try {
+			approvalFlow = await approvalEngine.prepareApprovalFlow(expense.id);
+		} catch (error) {
+			if (error.code === 'NO_APPROVAL_ROUTE' || error.code === 'MANAGER_REQUIRED_MISSING') {
+				await prisma.expenseLog.create({
+					data: {
+						expense_id: expense.id,
+						actor_id: req.user.id,
+						action: 'warning',
+						note: error.message,
+					},
+				});
+
+				return res.status(409).json({ message: error.message });
+			}
+
+			throw error;
 		}
 
 		await prisma.expense.update({
@@ -409,8 +427,7 @@ const submitExpense = async (req, res) => {
 			},
 		});
 
-		const { triggerApprovalFlow } = require('../services/approvalEngine');
-		await triggerApprovalFlow(expense.id);
+		await approvalEngine.triggerApprovalFlow(expense.id, approvalFlow);
 
 		const submittedExpense = await findExpenseById(expense.id);
 
@@ -483,18 +500,7 @@ const overrideExpenseStatus = async (req, res) => {
 
 const getLogs = async (req, res) => {
 	try {
-		const expense = await prisma.expense.findUnique({
-			where: {
-				id: req.params.id,
-			},
-			include: {
-				employee: {
-					select: {
-						manager_id: true,
-					},
-				},
-			},
-		});
+		const expense = await findExpenseById(req.params.id);
 
 		if (!expense || expense.company_id !== req.user.company_id) {
 			return res.status(404).json({ message: 'Expense not found.' });

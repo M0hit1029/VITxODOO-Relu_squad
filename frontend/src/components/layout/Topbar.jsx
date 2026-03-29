@@ -1,7 +1,7 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Menu, MoonStar, Bell, SunMedium, LogOut } from 'lucide-react'
 import { useMemo } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/Button'
 import { useAuthStore } from '@/store/authStore'
@@ -21,6 +21,7 @@ const pathLabels = {
 
 export function Topbar({ onMenuClick }) {
   const location = useLocation()
+  const navigate = useNavigate()
   const user = useAuthStore((state) => state.user)
   const logout = useAuthStore((state) => state.logout)
   const darkMode = useUIStore((state) => state.darkMode)
@@ -101,7 +102,10 @@ export function Topbar({ onMenuClick }) {
                 <DropdownMenu.Separator className="my-1.5 h-px bg-border/50" />
                 <DropdownMenu.Item
                   className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm text-destructive outline-none transition-colors hover:bg-destructive/10"
-                  onSelect={logout}
+                  onSelect={() => {
+                    logout()
+                    navigate('/signin', { replace: true })
+                  }}
                 >
                   <LogOut className="h-4 w-4" />
                   Sign out

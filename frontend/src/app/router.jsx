@@ -17,6 +17,7 @@ const AllExpenses = lazy(() => import('@/pages/admin/AllExpenses'))
 const EmployeeDashboard = lazy(() => import('@/pages/employee/EmployeeDashboard'))
 const MyExpenses = lazy(() => import('@/pages/employee/MyExpenses'))
 const NewExpense = lazy(() => import('@/pages/employee/NewExpense'))
+const EditExpense = lazy(() => import('@/pages/employee/EditExpense'))
 const ExpenseDetail = lazy(() => import('@/pages/employee/ExpenseDetail'))
 const ManagerDashboard = lazy(() => import('@/pages/manager/ManagerDashboard'))
 const ApprovalQueue = lazy(() => import('@/pages/manager/ApprovalQueue'))
@@ -100,6 +101,7 @@ export const router = createBrowserRouter([
       { path: '/dashboard', element: withSuspense(<EmployeeDashboard />) },
       { path: '/expenses', element: withSuspense(<MyExpenses />) },
       { path: '/expenses/new', element: withSuspense(<NewExpense />) },
+      { path: '/expenses/:id/edit', element: withSuspense(<EditExpense />) },
       { path: '/expenses/:id', element: withSuspense(<ExpenseDetail />) },
       {
         path: '/approvals',

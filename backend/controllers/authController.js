@@ -7,12 +7,40 @@ const { getCompanySettings } = require('../services/companySettingsStore');
 const { serializeCompany, serializeUser } = require('../utils/serializers');
 const logger = require('../utils/logger');
 
+const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
+
+const isBcryptHash = (value) => typeof value === 'string' && /^\$2[aby]\$\d{2}\$/.test(value);
+
+const verifyPassword = async (user, rawPassword) => {
+	if (!user?.password_hash || !rawPassword) {
+		return false;
+	}
+
+	if (isBcryptHash(user.password_hash)) {
+		return bcrypt.compare(rawPassword, user.password_hash);
+	}
+
+	// Backward compatibility for legacy records that stored plaintext values.
+	const isLegacyMatch = user.password_hash === rawPassword;
+
+	if (isLegacyMatch) {
+		const password_hash = await bcrypt.hash(rawPassword, 10);
+		await prisma.user.update({
+			where: { id: user.id },
+			data: { password_hash },
+		});
+		logger.info(`Upgraded legacy password hash format for ${user.email}.`);
+	}
+
+	return isLegacyMatch;
+};
+
 const signup = async (req, res) => {
 	try {
-		const name = req.body?.name || req.body?.fullName;
-		const email = req.body?.email;
+		const name = String(req.body?.name || req.body?.fullName || '').trim();
+		const email = normalizeEmail(req.body?.email);
 		const password = req.body?.password;
-		const country = req.body?.country;
+		const country = String(req.body?.country || '').trim();
 		const base_currency = req.body?.base_currency || req.body?.baseCurrency;
 		const companyName = req.body?.companyName || `${name}'s Company`;
 
@@ -21,8 +49,13 @@ const signup = async (req, res) => {
 			return res.status(400).json({ message: 'All fields are required.' });
 		}
 
-		const existingUser = await prisma.user.findUnique({
-			where: { email },
+		const existingUser = await prisma.user.findFirst({
+			where: {
+				email: {
+					equals: email,
+					mode: 'insensitive',
+				},
+			},
 		});
 
 		if (existingUser) {
@@ -71,10 +104,21 @@ const signup = async (req, res) => {
 
 const login = async (req, res) => {
 	try {
-		const { email, password } = req.body;
+		const email = normalizeEmail(req.body?.email);
+		const password = String(req.body?.password || '');
 
-		const user = await prisma.user.findUnique({
-			where: { email },
+		if (!email || !password) {
+			logger.warn('Login failed: Email and password are required.');
+			return res.status(400).json({ message: 'Email and password are required.' });
+		}
+
+		const user = await prisma.user.findFirst({
+			where: {
+				email: {
+					equals: email,
+					mode: 'insensitive',
+				},
+			},
 			include: { company: true },
 		});
 
@@ -83,7 +127,7 @@ const login = async (req, res) => {
 			return res.status(401).json({ message: 'Invalid credentials.' });
 		}
 
-		const isPasswordValid = await bcrypt.compare(password, user.password_hash);
+		const isPasswordValid = await verifyPassword(user, password);
 
 		if (!isPasswordValid) {
 			logger.warn(`Login failed: Invalid password for ${email}`);
@@ -111,10 +155,15 @@ const login = async (req, res) => {
 
 const forgotPassword = async (req, res) => {
 	try {
-		const { email } = req.body;
+		const email = normalizeEmail(req.body?.email);
 
-		const user = await prisma.user.findUnique({
-			where: { email },
+		const user = await prisma.user.findFirst({
+			where: {
+				email: {
+					equals: email,
+					mode: 'insensitive',
+				},
+			},
 		});
 
 		if (user) {

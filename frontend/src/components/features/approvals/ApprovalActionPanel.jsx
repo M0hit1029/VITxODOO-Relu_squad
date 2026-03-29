@@ -6,12 +6,14 @@ import { Modal } from '@/components/ui/Modal'
 export function ApprovalActionPanel({ open, onOpenChange, decision, onConfirm }) {
   const [comment, setComment] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [errorMessage, setErrorMessage] = useState('')
   const isApprove = decision === 'approve' || decision === 'approved'
 
   useEffect(() => {
     if (!open) {
       setComment('')
       setIsSubmitting(false)
+      setErrorMessage('')
     }
   }, [open])
 
@@ -26,7 +28,7 @@ export function ApprovalActionPanel({ open, onOpenChange, decision, onConfirm })
       description={
         isApprove
           ? 'Add an optional note before confirming approval.'
-          : 'A comment is recommended so the employee knows how to correct this.'
+          : 'A rejection comment is required so the employee knows how to correct this.'
       }
       footer={
         <>
@@ -38,9 +40,15 @@ export function ApprovalActionPanel({ open, onOpenChange, decision, onConfirm })
             loading={isSubmitting}
             loadingText={isApprove ? 'Approving...' : 'Rejecting...'}
             onClick={async () => {
+              if (!isApprove && !comment.trim()) {
+                setErrorMessage('A rejection comment is required.')
+                return
+              }
+
               setIsSubmitting(true)
               try {
-                await onConfirm(comment)
+                setErrorMessage('')
+                await onConfirm(comment.trim())
                 setComment('')
               } finally {
                 setIsSubmitting(false)
@@ -57,8 +65,12 @@ export function ApprovalActionPanel({ open, onOpenChange, decision, onConfirm })
         rows={4}
         placeholder={isApprove ? 'Optional comment' : 'Reason for rejection'}
         value={comment}
-        onChange={(event) => setComment(event.target.value)}
+        onChange={(event) => {
+          setComment(event.target.value)
+          if (errorMessage) setErrorMessage('')
+        }}
       />
+      {errorMessage && <p className="mt-2 text-sm text-destructive">{errorMessage}</p>}
     </Modal>
   )
 }

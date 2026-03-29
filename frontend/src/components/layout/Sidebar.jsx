@@ -80,7 +80,7 @@ export function Sidebar() {
                   'group flex items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-sm font-medium transition-all duration-200',
                   'hover:bg-primary/8 hover:text-foreground',
                   isActive &&
-                    'border-primary/20 bg-primary/10 text-primary shadow-[inset_3px_0_0_var(--primary)]',
+                  'border-primary/20 bg-primary/10 text-primary shadow-[inset_3px_0_0_var(--primary)]',
                   !sidebarOpen && 'justify-center px-0',
                 )
               }

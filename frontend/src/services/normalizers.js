@@ -141,6 +141,7 @@ export function normalizeQueueItem(item) {
     expenseStatus: item.expenseStatus ?? item.expense_status ?? 'submitted',
     createdAt: item.createdAt ?? item.created_at,
     submittedAt: item.submittedAt ?? item.submitted_at ?? item.createdAt ?? item.created_at,
+    decidedAt: item.decidedAt ?? item.decided_at ?? null,
     amount: Number(item.amount ?? 0),
     currency: item.currency,
     amountInBase: Number(item.amountInBase ?? item.amount_in_base ?? item.amount ?? 0),

@@ -77,7 +77,7 @@ const approveExpense = async (req, res) => {
 		logger.info(`Expense request ${req.params.id} approved successfully by user ${req.user.id}.`);
 		return res.status(200).json({ message: 'Expense approved successfully.' });
 	} catch (error) {
-		if (error.message === 'Already decided') {
+		if (error.code === 'ALREADY_DECIDED' || error.message === 'Already decided') {
 			logger.warn(`Approve expense failed: Request ${req.params.id} already decided.`);
 			return res.status(400).json({ message: 'Already decided' });
 		}
@@ -125,7 +125,7 @@ const rejectExpense = async (req, res) => {
 		logger.info(`Expense request ${req.params.id} rejected by user ${req.user.id}.`);
 		return res.status(200).json({ message: 'Expense rejected successfully.' });
 	} catch (error) {
-		if (error.message === 'Already decided') {
+		if (error.code === 'ALREADY_DECIDED' || error.message === 'Already decided') {
 			logger.warn(`Reject expense failed: Request ${req.params.id} already decided.`);
 			return res.status(400).json({ message: 'Already decided' });
 		}

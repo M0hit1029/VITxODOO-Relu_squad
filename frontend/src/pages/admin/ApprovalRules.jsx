@@ -76,8 +76,10 @@ export default function ApprovalRules() {
                 >
                   <CardContent className="space-y-3 p-5">
                     <div>
-                      <p className="font-medium text-card-foreground">{rule.name}</p>
-                      <p className="mt-1 text-sm text-muted-foreground">{rule.description}</p>
+                      <p className="font-medium text-card-foreground">{rule.description}</p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {rule.isManagerRequired ? 'Manager-first approval' : 'Custom approval chain'}
+                      </p>
                     </div>
                     <p className="text-sm text-muted-foreground">
                       {rule.employee?.name ?? 'Unassigned'} - {rule.mode} - {rule.approvers.length} approver(s)
@@ -119,6 +121,14 @@ export default function ApprovalRules() {
                   </CardContent>
                 </Card>
               ))}
+
+          {!isLoading && rules.length === 0 && (
+            <Card>
+              <CardContent className="p-6 text-sm text-muted-foreground">
+                No approval rules are configured yet. Create one before employees submit expenses for approval.
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         <ApprovalRuleBuilder

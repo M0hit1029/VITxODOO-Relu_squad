@@ -184,11 +184,7 @@ async function buildAdminDashboard() {
 }
 
 async function buildManagerDashboard() {
-  const [expenses, queueResponse] = await Promise.all([
-    fetchExpensesFromApi(),
-    api.get('/api/approvals/pending'),
-  ])
-
+  const queueResponse = await api.get('/api/approvals/pending')
   const queue = queueResponse.data.map(normalizeQueueItem)
   const baseCurrency = getBaseCurrency()
   const currentMonthStart = startOfMonth(new Date())
@@ -201,13 +197,13 @@ async function buildManagerDashboard() {
     },
     {
       label: 'Approved This Month',
-      value: queue.filter((item) => item.status === 'approved' && new Date(item.createdAt) >= currentMonthStart).length,
+      value: queue.filter((item) => item.status === 'approved' && item.decidedAt && new Date(item.decidedAt) >= currentMonthStart).length,
       kind: 'count',
       color: 'success',
     },
     {
       label: 'Rejected This Month',
-      value: queue.filter((item) => item.status === 'rejected' && new Date(item.createdAt) >= currentMonthStart).length,
+      value: queue.filter((item) => item.status === 'rejected' && item.decidedAt && new Date(item.decidedAt) >= currentMonthStart).length,
       kind: 'count',
       color: 'destructive',
     },
@@ -222,9 +218,9 @@ async function buildManagerDashboard() {
   ]
 
   const totals = new Map()
-  expenses.forEach((expense) => {
-    const current = totals.get(expense.employeeName) ?? 0
-    totals.set(expense.employeeName, current + Number(expense.amountInBase))
+  queue.forEach((item) => {
+    const current = totals.get(item.employeeName) ?? 0
+    totals.set(item.employeeName, current + Number(item.amountInBase))
   })
 
   return {
@@ -244,9 +240,6 @@ function getEmployee(expense, users) {
 function matchesRole(expense, user) {
   if (!user) return false
   if (user.role === 'admin') return true
-  if (user.role === 'manager') {
-    return expense.employeeId === user.id || expense.approvalChain?.some((step) => step.approverId === user.id)
-  }
   return expense.employeeId === user.id
 }
 

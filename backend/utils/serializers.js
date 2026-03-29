@@ -238,6 +238,7 @@ const serializeApprovalQueueItem = (request) => {
 		expenseStatus: expense.status,
 		createdAt: expense.created_at,
 		submittedAt: expense.created_at,
+		decidedAt: request.decided_at,
 		amount: toNumber(expense.amount),
 		currency: expense.currency,
 		amountInBase: toNumber(expense.amount_in_base, toNumber(expense.amount)),

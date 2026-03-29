@@ -1,4 +1,4 @@
-import { Plus, Search } from 'lucide-react'
+import { Eye, Pencil, Plus, Search } from 'lucide-react'
 import { useDeferredValue, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/Button'
@@ -74,6 +74,35 @@ export default function MyExpenses() {
     {
       header: 'Status',
       cell: (row) => <ExpenseStatusBadge status={row.status} />,
+    },
+    {
+      header: 'Actions',
+      cell: (row) => (
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={(event) => {
+              event.stopPropagation()
+              navigate(`/expenses/${row.id}`)
+            }}
+          >
+            <Eye className="h-4 w-4" />
+          </Button>
+          {row.status === 'draft' && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={(event) => {
+                event.stopPropagation()
+                navigate(`/expenses/${row.id}/edit`)
+              }}
+            >
+              <Pencil className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
+      ),
     },
   ]
 
@@ -169,7 +198,7 @@ export default function MyExpenses() {
         columns={columns}
         data={expenses}
         loading={isLoading}
-        onRowClick={(row) => navigate(`/expenses/${row.id}`)}
+        onRowClick={(row) => navigate(row.status === 'draft' ? `/expenses/${row.id}/edit` : `/expenses/${row.id}`)}
         emptyState={
           <EmptyState
             title="No expenses yet. Submit your first one!"

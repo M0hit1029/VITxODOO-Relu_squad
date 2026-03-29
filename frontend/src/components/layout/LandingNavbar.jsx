@@ -19,7 +19,7 @@ export function LandingNavbar() {
   const isLanding = location.pathname === '/'
 
   useMotionValueEvent(scrollY, 'change', (latest) => {
-    setScrolled(latest > 60)
+    setScrolled(latest > 40)
   })
 
   const handleNavClick = (e, href) => {
@@ -39,48 +39,33 @@ export function LandingNavbar() {
         initial={{ y: -100, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-        className={`fixed inset-x-0 top-0 z-50 flex justify-center transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-          scrolled ? 'top-3 px-4' : 'top-0 px-0'
-        }`}
-      >
-        <div
-          className={`flex w-full items-center justify-between transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-            scrolled
-              ? 'h-12 max-w-3xl rounded-2xl border border-border/60 bg-background/75 px-4 shadow-[0_8px_32px_rgba(0,0,0,0.1),0_0_0_1px_rgba(255,255,255,0.05)] backdrop-blur-2xl'
-              : 'section-shell h-16 bg-transparent lg:h-18'
+        className={`fixed inset-x-0 top-0 z-50 transition-all duration-500 ${scrolled
+            ? 'border-b border-border/50 bg-background/70 shadow-[0_8px_32px_rgba(0,0,0,0.08)] backdrop-blur-2xl'
+            : 'bg-transparent'
           }`}
-        >
+      >
+        <div className="section-shell flex h-16 items-center justify-between lg:h-18">
           {/* Logo */}
           <Link
             to="/"
-            className="group flex items-center gap-2 transition-transform hover:scale-[1.02]"
+            className="group flex items-center gap-2.5 transition-transform hover:scale-[1.02]"
           >
-            <div
-              className={`flex shrink-0 items-center justify-center rounded-xl bg-primary font-display font-bold text-primary-foreground shadow-[0_4px_12px_color-mix(in_oklab,var(--primary)_35%,transparent)] transition-all duration-500 ${
-                scrolled ? 'h-7 w-7 text-[10px]' : 'h-9 w-9 text-sm'
-              }`}
-            >
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary font-display text-sm font-bold text-primary-foreground shadow-[0_4px_12px_color-mix(in_oklab,var(--primary)_35%,transparent)]">
               AL
             </div>
-            <span
-              className={`font-display tracking-tight text-foreground transition-all duration-500 ${
-                scrolled ? 'text-sm' : 'text-lg'
-              }`}
-            >
+            <span className="font-display text-lg tracking-tight text-foreground">
               Amber<span className="text-primary">Ledger</span>
             </span>
           </Link>
 
           {/* Desktop Nav Links */}
-          <div className="hidden items-center gap-0.5 lg:flex">
+          <div className="hidden items-center gap-1 lg:flex">
             {NAV_LINKS.map((link) => (
               <a
                 key={link.label}
                 href={link.href}
                 onClick={(e) => handleNavClick(e, link.href)}
-                className={`group relative rounded-lg font-medium text-muted-foreground transition-colors hover:text-foreground ${
-                  scrolled ? 'px-3 py-1.5 text-xs' : 'px-4 py-2 text-sm'
-                }`}
+                className="group relative rounded-xl px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
               >
                 {link.label}
                 <span className="absolute inset-x-2 -bottom-px h-px scale-x-0 bg-primary transition-transform duration-300 group-hover:scale-x-100" />
@@ -89,25 +74,14 @@ export function LandingNavbar() {
           </div>
 
           {/* Desktop CTAs */}
-          <div className="hidden items-center gap-2 lg:flex">
-            <Button
-              variant="ghost"
-              asChild
-              className={`transition-all duration-500 ${
-                scrolled ? 'h-7 px-3 text-xs' : 'h-9 px-4 text-sm'
-              }`}
-            >
+          <div className="hidden items-center gap-3 lg:flex">
+            <Button variant="ghost" asChild className="h-9 px-4 text-sm">
               <Link to="/signin">Sign In</Link>
             </Button>
-            <Button
-              asChild
-              className={`gap-1.5 transition-all duration-500 ${
-                scrolled ? 'h-7 px-3 text-xs' : 'h-9 gap-1.5 px-4 text-sm'
-              }`}
-            >
+            <Button asChild className="h-9 gap-1.5 px-4 text-sm">
               <Link to="/signup">
                 Get Started
-                <ArrowRight className={`transition-all duration-500 ${scrolled ? 'h-3 w-3' : 'h-3.5 w-3.5'}`} />
+                <ArrowRight className="h-3.5 w-3.5" />
               </Link>
             </Button>
           </div>
@@ -115,9 +89,7 @@ export function LandingNavbar() {
           {/* Mobile menu toggle */}
           <button
             type="button"
-            className={`flex items-center justify-center rounded-xl text-foreground transition-all hover:bg-accent lg:hidden ${
-              scrolled ? 'h-8 w-8' : 'h-10 w-10'
-            }`}
+            className="flex h-10 w-10 items-center justify-center rounded-xl text-foreground transition-colors hover:bg-accent lg:hidden"
             onClick={() => setMobileOpen((v) => !v)}
           >
             {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
