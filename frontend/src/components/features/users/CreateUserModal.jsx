@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect } from 'react'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import { Button } from '@/components/ui/Button'
@@ -21,7 +21,7 @@ export function CreateUserModal({ open, onOpenChange, managers, onCreate }) {
     resolver: zodResolver(createUserSchema),
     defaultValues: getDefaultValues(managers),
   })
-  const formId = useMemo(() => 'create-user-form', [])
+  const formId = 'create-user-form'
   const role = form.watch('role')
   const managerId = form.watch('managerId')
   const isSubmitting = form.formState.isSubmitting
@@ -50,6 +50,7 @@ export function CreateUserModal({ open, onOpenChange, managers, onCreate }) {
   })
 
   const handleOpenChange = (nextOpen) => {
+    if (isSubmitting) return
     if (!nextOpen) {
       form.reset(getDefaultValues(managers))
     }

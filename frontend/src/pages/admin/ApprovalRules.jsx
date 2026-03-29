@@ -106,6 +106,8 @@ export default function ApprovalRules() {
                             await deleteApprovalRule(rule.id)
                             toast.success('Rule deleted.')
                             await load()
+                          } catch (error) {
+                            toast.error(error.message || 'Unable to delete rule.')
                           } finally {
                             setDeletingRuleId(null)
                           }
@@ -124,9 +126,14 @@ export default function ApprovalRules() {
           rule={selectedRule}
           onCancel={() => setSelectedRule(null)}
           onSave={async (rule) => {
-            await saveApprovalRule(rule)
-            toast.success('Rule saved.')
-            await load()
+            try {
+              await saveApprovalRule(rule)
+              toast.success('Rule saved.')
+              await load()
+            } catch (error) {
+              toast.error(error.message || 'Unable to save rule.')
+              throw error
+            }
           }}
         />
       </div>

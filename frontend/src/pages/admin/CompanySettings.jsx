@@ -53,6 +53,8 @@ export default function CompanySettings() {
       })
       setCompany(updated)
       toast.success('Settings saved.')
+    } catch (error) {
+      toast.error(error.message || 'Unable to save settings.')
     } finally {
       setIsSaving(false)
     }

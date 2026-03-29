@@ -92,15 +92,20 @@ export default function ApprovalQueue() {
 
   const handleDecision = async (comment) => {
     if (!pendingAction) return
-    await decideApproval({
-      expenseId: pendingAction.expense.id,
-      approvalId: pendingAction.expense.approvalRequestId,
-      decision: pendingAction.decision,
-      comment,
-    })
-    toast.success(`Expense ${pendingAction.decision === 'approve' ? 'approved' : 'rejected'}.`)
-    setPendingAction(null)
-    loadQueue()
+    try {
+      await decideApproval({
+        expenseId: pendingAction.expense.id,
+        approvalId: pendingAction.expense.approvalRequestId,
+        decision: pendingAction.decision,
+        comment,
+      })
+      toast.success(`Expense ${pendingAction.decision === 'approve' ? 'approved' : 'rejected'}.`)
+      setPendingAction(null)
+      await loadQueue()
+    } catch (error) {
+      toast.error(error.message || 'Unable to update approval.')
+      throw error
+    }
   }
 
   return (

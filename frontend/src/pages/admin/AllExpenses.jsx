@@ -116,7 +116,10 @@ export default function AllExpenses() {
 
       <Modal
         open={Boolean(overrideExpense)}
-        onOpenChange={(value) => !value && setOverrideExpense(null)}
+        onOpenChange={(value) => {
+          if (overrideDecision) return
+          if (!value) setOverrideExpense(null)
+        }}
         title="Override approval"
         description="Force approve or reject this expense as an admin."
         footer={
@@ -134,6 +137,8 @@ export default function AllExpenses() {
                   setOverrideExpense(null)
                   toast.success('Expense rejected by override.')
                   await fetchExpenses({ filters })
+                } catch (error) {
+                  toast.error(error.message || 'Unable to reject expense.')
                 } finally {
                   setOverrideDecision(null)
                 }
@@ -152,6 +157,8 @@ export default function AllExpenses() {
                   setOverrideExpense(null)
                   toast.success('Expense approved by override.')
                   await fetchExpenses({ filters })
+                } catch (error) {
+                  toast.error(error.message || 'Unable to approve expense.')
                 } finally {
                   setOverrideDecision(null)
                 }

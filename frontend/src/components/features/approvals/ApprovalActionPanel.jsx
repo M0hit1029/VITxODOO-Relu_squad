@@ -18,7 +18,10 @@ export function ApprovalActionPanel({ open, onOpenChange, decision, onConfirm })
   return (
     <Modal
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={(nextOpen) => {
+        if (isSubmitting) return
+        onOpenChange(nextOpen)
+      }}
       title={isApprove ? 'Approve expense' : 'Reject expense'}
       description={
         isApprove

@@ -201,7 +201,10 @@ export function ExpenseForm({ initialValues, countries, baseCurrency = 'INR', on
 
       <Modal
         open={confirmOpen}
-        onOpenChange={setConfirmOpen}
+        onOpenChange={(nextOpen) => {
+          if (activeAction === 'submit') return
+          setConfirmOpen(nextOpen)
+        }}
         title="Submit this expense?"
         description="This sends the request into the approval workflow and makes the form read-only."
         footer={

@@ -15,13 +15,18 @@ export default function NewExpense() {
   }, [])
 
   const handleSave = async (payload, shouldSubmit) => {
-    const saved = await persistExpense(payload)
-    if (shouldSubmit && saved?.id) {
-      await submitCurrentExpense(saved.id)
-      toast.success('Expense submitted for approval.')
-      return
+    try {
+      const saved = await persistExpense(payload)
+      if (shouldSubmit && saved?.id) {
+        await submitCurrentExpense(saved.id)
+        toast.success('Expense submitted for approval.')
+        return
+      }
+      toast.success('Draft saved.')
+    } catch (error) {
+      toast.error(error.message || `Unable to ${shouldSubmit ? 'submit' : 'save'} expense.`)
+      throw error
     }
-    toast.success('Draft saved.')
   }
 
   if (!countries.length) {

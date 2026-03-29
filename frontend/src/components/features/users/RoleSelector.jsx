@@ -33,7 +33,10 @@ export function RoleSelector({ value, onChange }) {
       />
       <Modal
         open={confirmOpen}
-        onOpenChange={setConfirmOpen}
+        onOpenChange={(nextOpen) => {
+          if (isSaving) return
+          setConfirmOpen(nextOpen)
+        }}
         title="Change role?"
         description="This updates what the user can access inside the workspace."
         footer={
