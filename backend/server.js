@@ -1,25 +1,34 @@
-require('dotenv').config();
+require('dotenv/config');
 const express = require('express');
-const morgan = require('morgan');
-const logger = require('./utils/logger');
-const db = require('./dbs/db'); // This simply imports and initiates the connection
+const cors = require('cors');
+const path = require('path');
+const fs = require('fs');
+const prisma = require('./dbs/db');
+const router = require('./routes/router');
+
 const app = express();
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 5000;
+const uploadsPath = path.join(__dirname, 'uploads');
 
-// Connect Morgan to Winston
-const morganMiddleware = morgan(
-  ':method :url :status :res[content-length] - :response-time ms',
-  { stream: { write: (message) => logger.http(message.trim()) } }
-);
+fs.mkdirSync(uploadsPath, { recursive: true });
 
-app.use(morganMiddleware);
+app.use(cors({ origin: process.env.CLIENT_URL, credentials: true }));
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use('/uploads', express.static(uploadsPath));
+app.use('/api', router);
 
-const routes = require('./routes/router');
+const startServer = async () => {
+  await prisma.$connect();
 
-// Mount the central router at the /api prefix
-app.use('/api', routes);
+  app.listen(port, () => {
+    console.log(`Server running on port ${port}`);
+  });
+};
 
-app.listen(port, () => {
-  logger.info(`Server is running on port ${port}`);
+process.on('SIGINT', async () => {
+  await prisma.$disconnect();
+  process.exit(0);
 });
+
+startServer();
