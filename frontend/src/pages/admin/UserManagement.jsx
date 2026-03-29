@@ -16,10 +16,19 @@ export default function UserManagement() {
   const [users, setUsers] = useState([])
   const [modalOpen, setModalOpen] = useState(false)
   const [filters, setFilters] = useState({ search: '', role: 'all' })
+  const [isLoadingUsers, setIsLoadingUsers] = useState(true)
+  const [sendingPasswordUserId, setSendingPasswordUserId] = useState(null)
 
   const loadUsers = useCallback(async () => {
-    const result = await listUsers(filters)
-    setUsers(result)
+    setIsLoadingUsers(true)
+    try {
+      const result = await listUsers(filters)
+      setUsers(result)
+    } catch (error) {
+      toast.error(error.message || 'Unable to load users.')
+    } finally {
+      setIsLoadingUsers(false)
+    }
   }, [filters])
 
   useEffect(() => {
@@ -47,20 +56,29 @@ export default function UserManagement() {
         <RoleSelector
           value={row.role}
           onChange={async (role) => {
-            await updateUser(row.id, { role })
-            toast.success('Role updated.')
-            loadUsers()
+            try {
+              await updateUser(row.id, { role })
+              toast.success('Role updated.')
+              await loadUsers()
+            } catch (error) {
+              toast.error(error.message || 'Unable to update role.')
+              throw error
+            }
           }}
         />
       ),
     },
     {
       header: 'Manager',
-      cell: (row) => managers.find((manager) => manager.id === row.managerId)?.name ?? '—',
+      cell: (row) => row.manager?.name ?? managers.find((manager) => manager.id === row.managerId)?.name ?? '—',
     },
     {
       header: 'Status',
-      cell: (row) => <Badge variant={row.status === 'active' ? 'success' : 'outline'}>{row.status}</Badge>,
+      cell: (row) => (
+        <Badge variant={(row.status ?? 'active') === 'active' ? 'success' : 'outline'}>
+          {row.status ?? 'active'}
+        </Badge>
+      ),
     },
     {
       header: 'Actions',
@@ -68,10 +86,19 @@ export default function UserManagement() {
         <Button
           variant="ghost"
           size="sm"
+          loading={sendingPasswordUserId === row.id}
+          loadingText="Sending password..."
           onClick={async (event) => {
             event.stopPropagation()
-            await sendPassword(row.id)
-            toast.success('Password email queued.')
+            setSendingPasswordUserId(row.id)
+            try {
+              await sendPassword(row.id)
+              toast.success('Password email queued.')
+            } catch (error) {
+              toast.error(error.message || 'Unable to send password email.')
+            } finally {
+              setSendingPasswordUserId(null)
+            }
           }}
         >
           <Mail className="mr-1.5 h-4 w-4" />
@@ -122,16 +149,21 @@ export default function UserManagement() {
         </CardContent>
       </Card>
 
-      <DataTable columns={columns} data={users} />
+      <DataTable columns={columns} data={users} loading={isLoadingUsers} />
 
       <CreateUserModal
         open={modalOpen}
         onOpenChange={setModalOpen}
         managers={managers}
         onCreate={async (values) => {
-          await createUser(values)
-          toast.success('User invited.')
-          loadUsers()
+          try {
+            await createUser(values)
+            toast.success('User created and password emailed.')
+            await loadUsers()
+          } catch (error) {
+            toast.error(error.message || 'Unable to create user.')
+            throw error
+          }
         }}
       />
     </div>

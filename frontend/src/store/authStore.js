@@ -30,6 +30,10 @@ export const useAuthStore = create(
           user,
           role: user?.role ?? state.role,
         })),
+      setCompany: (company) =>
+        set({
+          company,
+        }),
       validateSession: () => {
         const state = get()
         if (!state.token || !state.user) state.logout()

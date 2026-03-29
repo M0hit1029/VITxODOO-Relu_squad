@@ -83,6 +83,7 @@ export function ApprovalRuleBuilder({ users, rule, onSave, onCancel }) {
     },
   )
   const [newApprover, setNewApprover] = useState(approverOptions[0]?.value ?? '')
+  const [isSaving, setIsSaving] = useState(false)
   const sensors = useSensors(useSensor(PointerSensor))
 
   useEffect(() => {
@@ -123,22 +124,26 @@ export function ApprovalRuleBuilder({ users, rule, onSave, onCancel }) {
           value={form.name}
           onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
           placeholder="Rule name"
+          disabled={isSaving}
         />
         <Input
           value={form.description}
           onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
           placeholder="Rule description"
+          disabled={isSaving}
         />
         <Select
           value={form.employeeId}
           onValueChange={(value) => setForm((current) => ({ ...current, employeeId: value }))}
           options={employeeOptions}
+          disabled={isSaving}
         />
         <label className="flex items-center justify-between rounded-2xl border border-border/70 px-4 py-3 text-sm text-card-foreground">
           Is manager required as first approver?
           <input
             type="checkbox"
             checked={form.isManagerRequired}
+            disabled={isSaving}
             onChange={(event) =>
               setForm((current) => ({ ...current, isManagerRequired: event.target.checked }))
             }
@@ -152,6 +157,7 @@ export function ApprovalRuleBuilder({ users, rule, onSave, onCancel }) {
             { value: 'parallel', label: 'Parallel' },
             { value: 'hybrid', label: 'Hybrid' },
           ]}
+          disabled={isSaving}
         />
         {(form.mode === 'parallel' || form.mode === 'hybrid') && (
           <div className="space-y-2">
@@ -163,6 +169,7 @@ export function ApprovalRuleBuilder({ users, rule, onSave, onCancel }) {
               min="0"
               max="100"
               value={form.minApprovalPercentage}
+              disabled={isSaving}
               onChange={(event) =>
                 setForm((current) => ({
                   ...current,
@@ -181,10 +188,12 @@ export function ApprovalRuleBuilder({ users, rule, onSave, onCancel }) {
                 value={newApprover}
                 onValueChange={setNewApprover}
                 options={approverOptions}
+                disabled={isSaving}
               />
             </div>
             <Button
               variant="outline"
+              disabled={isSaving || !newApprover}
               onClick={() =>
                 setForm((current) => ({
                   ...current,
@@ -228,10 +237,23 @@ export function ApprovalRuleBuilder({ users, rule, onSave, onCancel }) {
         </div>
 
         <div className="flex justify-end gap-3">
-          <Button variant="ghost" onClick={onCancel}>
+          <Button variant="ghost" onClick={onCancel} disabled={isSaving}>
             Cancel
           </Button>
-          <Button onClick={() => onSave(form)}>Save Rule</Button>
+          <Button
+            loading={isSaving}
+            loadingText="Saving rule..."
+            onClick={async () => {
+              setIsSaving(true)
+              try {
+                await onSave(form)
+              } finally {
+                setIsSaving(false)
+              }
+            }}
+          >
+            Save Rule
+          </Button>
         </div>
       </CardContent>
     </Card>

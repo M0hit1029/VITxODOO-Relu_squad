@@ -5,10 +5,12 @@ import { ExpenseStatusBadge } from '@/components/features/expenses/ExpenseStatus
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { useExpenses } from '@/hooks/useExpenses'
+import { useAuthStore } from '@/store/authStore'
 
 export default function ApprovalDetail() {
   const { id } = useParams()
   const { currentExpense, fetchExpense } = useExpenses()
+  const company = useAuthStore((state) => state.company)
 
   useEffect(() => {
     if (id) fetchExpense(id)
@@ -33,7 +35,7 @@ export default function ApprovalDetail() {
             <div>
               <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Amount</p>
               <p className="money-text mt-2 text-card-foreground">
-                {formatCurrency(currentExpense.amount, currentExpense.currency)} • {formatCurrency(currentExpense.amountInBase, 'INR')}
+                {formatCurrency(currentExpense.amount, currentExpense.currency)} • {formatCurrency(currentExpense.amountInBase, company?.baseCurrency ?? currentExpense.baseCurrency ?? 'INR')}
               </p>
             </div>
           </div>

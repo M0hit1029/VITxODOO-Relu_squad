@@ -14,6 +14,7 @@ const iconMap = [Clock3, CheckCircle2, OctagonAlert, Wallet]
 
 export default function ManagerDashboard() {
   const user = useAuthStore((state) => state.user)
+  const company = useAuthStore((state) => state.company)
   const [dashboard, setDashboard] = useState(null)
   const fetchedRef = useRef(false)
 
@@ -44,12 +45,12 @@ export default function ManagerDashboard() {
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {dashboard.stats.map((stat, i) => (
-          <StatCard key={stat.label} {...stat} icon={iconMap[i]} />
+          <StatCard key={stat.label} {...stat} icon={iconMap[i]} currency={stat.currency ?? company?.baseCurrency} />
         ))}
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-        <SpendingChart title="Team Spending" data={dashboard.teamChart} type="bar" />
+        <SpendingChart title="Team Spending" data={dashboard.teamChart} type="bar" currency={company?.baseCurrency ?? 'INR'} />
         <Card>
           <CardHeader className="flex-row items-center justify-between">
             <CardTitle>Pending Approvals</CardTitle>
@@ -69,7 +70,7 @@ export default function ManagerDashboard() {
                 </div>
                 <div className="shrink-0 text-right">
                   <p className="money-text text-sm font-semibold text-card-foreground">
-                    {formatCurrency(expense.amountInBase, 'INR')}
+                    {formatCurrency(expense.amountInBase, company?.baseCurrency ?? expense.baseCurrency ?? 'INR')}
                   </p>
                   <ExpenseStatusBadge status={expense.status} />
                 </div>

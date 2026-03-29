@@ -1,7 +1,11 @@
 import { Canvas, useFrame } from '@react-three/fiber'
 import { Float, MeshDistortMaterial, MeshWobbleMaterial } from '@react-three/drei'
 import { Suspense, useRef, useMemo } from 'react'
-import * as THREE from 'three'
+
+function seededValue(seed) {
+  const value = Math.sin(seed * 9999.17) * 43758.5453123
+  return value - Math.floor(value)
+}
 
 function GlowTorus() {
   const ref = useRef()
@@ -34,12 +38,12 @@ function FloatingOrbs() {
     () =>
       Array.from({ length: 6 }, (_, i) => ({
         position: [
-          (Math.random() - 0.5) * 5,
-          (Math.random() - 0.5) * 4,
-          (Math.random() - 0.5) * 3,
+          (seededValue(i + 1) - 0.5) * 5,
+          (seededValue(i + 11) - 0.5) * 4,
+          (seededValue(i + 21) - 0.5) * 3,
         ],
-        scale: 0.15 + Math.random() * 0.2,
-        speed: 0.5 + Math.random() * 1.5,
+        scale: 0.15 + seededValue(i + 31) * 0.2,
+        speed: 0.5 + seededValue(i + 41) * 1.5,
         color: i % 2 === 0 ? '#f59e0b' : '#fbbf24',
       })),
     [],
@@ -69,9 +73,9 @@ function Particles() {
   const positions = useMemo(() => {
     const pos = new Float32Array(count * 3)
     for (let i = 0; i < count; i++) {
-      pos[i * 3] = (Math.random() - 0.5) * 8
-      pos[i * 3 + 1] = (Math.random() - 0.5) * 6
-      pos[i * 3 + 2] = (Math.random() - 0.5) * 4
+      pos[i * 3] = (seededValue(i + 101) - 0.5) * 8
+      pos[i * 3 + 1] = (seededValue(i + 201) - 0.5) * 6
+      pos[i * 3 + 2] = (seededValue(i + 301) - 0.5) * 4
     }
     return pos
   }, [])

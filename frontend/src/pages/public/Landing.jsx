@@ -157,17 +157,20 @@ export default function Landing() {
                 ['99.9%', 'Uptime', Zap],
                 ['4.6h', 'Avg Approval', Shield],
                 ['₹50L+', 'Processed', Globe],
-              ].map(([value, label, StatIcon]) => (
-                <div key={label} className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                    <StatIcon className="h-4 w-4" />
+              ].map((item) => {
+                const StatIcon = item[2]
+                return (
+                  <div key={item[1]} className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                      <StatIcon className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <p className="money-text text-lg font-semibold text-foreground">{item[0]}</p>
+                      <p className="text-xs text-muted-foreground">{item[1]}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="money-text text-lg font-semibold text-foreground">{value}</p>
-                    <p className="text-xs text-muted-foreground">{label}</p>
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </motion.div>
           </div>
 
@@ -288,15 +291,21 @@ export default function Landing() {
               ['1', 'Submit', 'Capture the expense, attach the receipt, and preview the converted amount.', BarChart3],
               ['2', 'Approve', 'Managers and finance teams review the request with the context they need.', Shield],
               ['3', 'Get Paid', 'Employees track the full timeline and know exactly where reimbursement stands.', Zap],
-            ].map(([step, title, text, StepIcon]) => (
-              <motion.div key={step} variants={fadeUp} className="glass-card group p-6 transition-all duration-300 hover:-translate-y-1">
-                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/12 text-lg font-semibold text-primary transition-all duration-500 group-hover:scale-110 group-hover:bg-primary group-hover:text-primary-foreground">
-                  {step}
-                </div>
-                <h3 className="font-display text-2xl text-card-foreground">{title}</h3>
-                <p className="mt-3 text-sm leading-7 text-muted-foreground">{text}</p>
-              </motion.div>
-            ))}
+            ].map((item) => {
+              const StepIcon = item[3]
+              return (
+                <motion.div key={item[0]} variants={fadeUp} className="glass-card group p-6 transition-all duration-300 hover:-translate-y-1">
+                  <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/12 text-lg font-semibold text-primary transition-all duration-500 group-hover:scale-110 group-hover:bg-primary group-hover:text-primary-foreground">
+                    {item[0]}
+                  </div>
+                  <div className="mb-4 text-primary">
+                    <StepIcon className="h-5 w-5" />
+                  </div>
+                  <h3 className="font-display text-2xl text-card-foreground">{item[1]}</h3>
+                  <p className="mt-3 text-sm leading-7 text-muted-foreground">{item[2]}</p>
+                </motion.div>
+              )
+            })}
           </div>
         </motion.div>
       </AnimatedSection>

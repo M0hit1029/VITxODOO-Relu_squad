@@ -1,31 +1,47 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 
 export function ApprovalActionPanel({ open, onOpenChange, decision, onConfirm }) {
   const [comment, setComment] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const isApprove = decision === 'approve' || decision === 'approved'
+
+  useEffect(() => {
+    if (!open) {
+      setComment('')
+      setIsSubmitting(false)
+    }
+  }, [open])
 
   return (
     <Modal
       open={open}
       onOpenChange={onOpenChange}
-      title={decision === 'approved' ? 'Approve expense' : 'Reject expense'}
+      title={isApprove ? 'Approve expense' : 'Reject expense'}
       description={
-        decision === 'approved'
+        isApprove
           ? 'Add an optional note before confirming approval.'
           : 'A comment is recommended so the employee knows how to correct this.'
       }
       footer={
         <>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
             Cancel
           </Button>
           <Button
-            variant={decision === 'approved' ? 'default' : 'destructive'}
-            onClick={() => {
-              onConfirm(comment)
-              setComment('')
+            variant={isApprove ? 'default' : 'destructive'}
+            loading={isSubmitting}
+            loadingText={isApprove ? 'Approving...' : 'Rejecting...'}
+            onClick={async () => {
+              setIsSubmitting(true)
+              try {
+                await onConfirm(comment)
+                setComment('')
+              } finally {
+                setIsSubmitting(false)
+              }
             }}
           >
             Confirm
@@ -36,7 +52,7 @@ export function ApprovalActionPanel({ open, onOpenChange, decision, onConfirm })
       <Input
         multiline
         rows={4}
-        placeholder={decision === 'approved' ? 'Optional comment' : 'Reason for rejection'}
+        placeholder={isApprove ? 'Optional comment' : 'Reason for rejection'}
         value={comment}
         onChange={(event) => setComment(event.target.value)}
       />

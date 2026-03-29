@@ -123,9 +123,11 @@ export default function SignUp() {
               { icon: ReceiptText, title: 'OCR receipt scanning', desc: 'Snap a photo, auto-fill the form' },
               { icon: Globe, title: 'Multi-currency support', desc: 'Spend in any currency, reimburse in yours' },
               { icon: FileCheck2, title: 'Complete audit trail', desc: 'Every action logged, exportable anytime' },
-            ].map(({ icon: Icon, title, desc }, i) => (
+            ].map((item, i) => {
+              const Icon = item.icon
+              return (
               <motion.div
-                key={title}
+                key={item.title}
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.4 + i * 0.1, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
@@ -135,11 +137,12 @@ export default function SignUp() {
                   <Icon className="h-5 w-5" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-card-foreground">{title}</p>
-                  <p className="mt-0.5 text-xs text-muted-foreground/70">{desc}</p>
+                  <p className="text-sm font-semibold text-card-foreground">{item.title}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground/70">{item.desc}</p>
                 </div>
               </motion.div>
-            ))}
+              )
+            })}
           </div>
 
           {/* Trust */}
@@ -320,12 +323,15 @@ export default function SignUp() {
                   { icon: Shield, text: 'Encrypted' },
                   { icon: Lock, text: 'Secure' },
                   { icon: Globe, text: 'Global' },
-                ].map(({ icon: Icon, text }) => (
-                  <div key={text} className="flex items-center gap-1.5 text-[11px] text-muted-foreground/60">
+                ].map((item) => {
+                  const Icon = item.icon
+                  return (
+                  <div key={item.text} className="flex items-center gap-1.5 text-[11px] text-muted-foreground/60">
                     <Icon className="h-3.5 w-3.5" />
-                    {text}
+                    {item.text}
                   </div>
-                ))}
+                  )
+                })}
               </div>
 
               <p className="mt-5 text-center text-sm text-muted-foreground">

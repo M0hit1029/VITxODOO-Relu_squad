@@ -1,12 +1,10 @@
 import axios from 'axios'
 import { useAuthStore } from '@/store/authStore'
 
-export const shouldUseMockApi =
-  import.meta.env.VITE_USE_MOCK_API === 'true' ||
-  (!import.meta.env.VITE_API_URL && import.meta.env.VITE_USE_MOCK_API !== 'false')
+export const shouldUseMockApi = import.meta.env.VITE_USE_MOCK_API === 'true'
 
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL,
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000',
   timeout: 10000,
 })
 
@@ -29,10 +27,5 @@ api.interceptors.response.use(
 
 export async function withApiFallback(apiCall, mockCall) {
   if (shouldUseMockApi) return mockCall()
-
-  try {
-    return await apiCall()
-  } catch (error) {
-    return mockCall(error)
-  }
+  return apiCall()
 }

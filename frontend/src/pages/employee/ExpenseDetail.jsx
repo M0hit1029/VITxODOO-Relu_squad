@@ -6,10 +6,12 @@ import { Avatar } from '@/components/ui/Avatar'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { useExpenses } from '@/hooks/useExpenses'
+import { useAuthStore } from '@/store/authStore'
 
 export default function ExpenseDetail() {
   const { id } = useParams()
   const { currentExpense, fetchExpense } = useExpenses()
+  const company = useAuthStore((state) => state.company)
 
   useEffect(() => {
     if (id) fetchExpense(id)
@@ -44,7 +46,7 @@ export default function ExpenseDetail() {
             <div>
               <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Base amount</p>
               <p className="money-text mt-2 text-card-foreground">
-                {formatCurrency(currentExpense.amountInBase, 'INR')}
+                {formatCurrency(currentExpense.amountInBase, company?.baseCurrency ?? currentExpense.baseCurrency ?? 'INR')}
               </p>
             </div>
             <div className="md:col-span-2">

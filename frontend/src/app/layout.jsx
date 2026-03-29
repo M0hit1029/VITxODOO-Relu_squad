@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { Toaster } from 'sonner'
 import { hydrateMockDb } from '@/services/mockDb'
+import { shouldUseMockApi } from '@/services/api'
 import { useAuthStore } from '@/store/authStore'
 import { useUIStore } from '@/store/uiStore'
 
@@ -9,7 +10,9 @@ export function AppProviders({ children }) {
   const validateSession = useAuthStore((state) => state.validateSession)
 
   useEffect(() => {
-    hydrateMockDb()
+    if (shouldUseMockApi) {
+      hydrateMockDb()
+    }
     validateSession()
   }, [validateSession])
 

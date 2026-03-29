@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/Input'
 import { DEMO_CREDENTIALS } from '@/lib/constants'
 import { signInSchema } from '@/lib/validators'
 import { useAuth } from '@/hooks/useAuth'
+import { shouldUseMockApi } from '@/services/api'
 
 function getRedirectPath(role) {
   if (role === 'admin') return '/admin'
@@ -36,8 +37,8 @@ export default function SignIn() {
   const form = useForm({
     resolver: zodResolver(signInSchema),
     defaultValues: {
-      email: 'employee@amberledger.io',
-      password: 'password123',
+      email: shouldUseMockApi ? 'employee@amberledger.io' : '',
+      password: shouldUseMockApi ? 'password123' : '',
       remember: true,
     },
   })
@@ -102,9 +103,11 @@ export default function SignIn() {
               { icon: TrendingUp, stat: '₹2.4L', label: 'Reimbursed this month', desc: 'Automated payouts, zero delays' },
               { icon: Clock, stat: '4.6h', label: 'Avg approval time', desc: 'From submission to sign-off' },
               { icon: Users, stat: '48', label: 'Expenses today', desc: 'Across all departments' },
-            ].map(({ icon: Icon, stat, label, desc }, i) => (
+            ].map((item, i) => {
+              const Icon = item.icon
+              return (
               <motion.div
-                key={label}
+                key={item.label}
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.4 + i * 0.12, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
@@ -116,14 +119,15 @@ export default function SignIn() {
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-baseline gap-2">
-                      <span className="money-text text-xl font-bold text-card-foreground">{stat}</span>
-                      <span className="text-sm text-muted-foreground">{label}</span>
+                      <span className="money-text text-xl font-bold text-card-foreground">{item.stat}</span>
+                      <span className="text-sm text-muted-foreground">{item.label}</span>
                     </div>
-                    <p className="mt-1 text-xs text-muted-foreground/70">{desc}</p>
+                    <p className="mt-1 text-xs text-muted-foreground/70">{item.desc}</p>
                   </div>
                 </div>
               </motion.div>
-            ))}
+              )
+            })}
           </div>
 
           {/* Bottom trust bar */}
@@ -178,7 +182,7 @@ export default function SignIn() {
                 Sign in to your<br />workspace
               </h1>
               <p className="mt-2 text-sm text-muted-foreground">
-                Pick a demo account or use your credentials.
+                {shouldUseMockApi ? 'Pick a demo account or use your credentials.' : 'Use your workspace credentials to continue.'}
               </p>
             </motion.div>
 
@@ -233,34 +237,37 @@ export default function SignIn() {
               </Button>
             </motion.form>
 
-            {/* Demo accounts */}
             <motion.div custom={2} initial="hidden" animate="visible" variants={fadeUp}>
-              <div className="my-6 flex items-center gap-3">
-                <div className="h-px flex-1 bg-border/30" />
-                <span className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground/60">Quick access</span>
-                <div className="h-px flex-1 bg-border/30" />
-              </div>
-              <div className="grid gap-2">
-                {DEMO_CREDENTIALS.map((demo) => (
-                  <button
-                    key={demo.role}
-                    type="button"
-                    className="group flex w-full items-center justify-between rounded-xl border border-border/30 bg-card/40 px-4 py-3 text-left backdrop-blur-xl transition-all hover:-translate-y-px hover:border-primary/25 hover:bg-card/70 hover:shadow-[0_4px_16px_color-mix(in_oklab,var(--primary)_8%,transparent)]"
-                    onClick={() => {
-                      form.setValue('email', demo.email)
-                      form.setValue('password', demo.password)
-                    }}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 font-display text-xs font-semibold text-primary transition-transform group-hover:scale-110">
-                        {demo.role.charAt(0)}
-                      </div>
-                      <span className="text-sm font-medium text-foreground">{demo.role}</span>
-                    </div>
-                    <span className="text-xs text-muted-foreground">{demo.email}</span>
-                  </button>
-                ))}
-              </div>
+              {shouldUseMockApi && (
+                <>
+                  <div className="my-6 flex items-center gap-3">
+                    <div className="h-px flex-1 bg-border/30" />
+                    <span className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground/60">Quick access</span>
+                    <div className="h-px flex-1 bg-border/30" />
+                  </div>
+                  <div className="grid gap-2">
+                    {DEMO_CREDENTIALS.map((demo) => (
+                      <button
+                        key={demo.role}
+                        type="button"
+                        className="group flex w-full items-center justify-between rounded-xl border border-border/30 bg-card/40 px-4 py-3 text-left backdrop-blur-xl transition-all hover:-translate-y-px hover:border-primary/25 hover:bg-card/70 hover:shadow-[0_4px_16px_color-mix(in_oklab,var(--primary)_8%,transparent)]"
+                        onClick={() => {
+                          form.setValue('email', demo.email)
+                          form.setValue('password', demo.password)
+                        }}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 font-display text-xs font-semibold text-primary transition-transform group-hover:scale-110">
+                            {demo.role.charAt(0)}
+                          </div>
+                          <span className="text-sm font-medium text-foreground">{demo.role}</span>
+                        </div>
+                        <span className="text-xs text-muted-foreground">{demo.email}</span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
 
               <p className="mt-6 text-center text-sm text-muted-foreground">
                 Need a workspace?{' '}

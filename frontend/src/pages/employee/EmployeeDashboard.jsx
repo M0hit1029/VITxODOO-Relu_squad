@@ -16,6 +16,7 @@ const iconMap = [ReceiptText, Clock3, CircleCheckBig, OctagonAlert]
 
 export default function EmployeeDashboard() {
   const user = useAuthStore((state) => state.user)
+  const company = useAuthStore((state) => state.company)
   const [dashboard, setDashboard] = useState(null)
   const fetchedRef = useRef(false)
 
@@ -58,6 +59,7 @@ export default function EmployeeDashboard() {
               icon={Icon}
               kind={stat.kind}
               color={stat.label === 'Rejected' ? 'destructive' : 'default'}
+              currency={stat.currency ?? company?.baseCurrency}
               trend={{ direction: index % 2 === 0 ? 'up' : 'down', percent: 8 + index * 3 }}
             />
           )
@@ -65,8 +67,8 @@ export default function EmployeeDashboard() {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.4fr_0.8fr]">
-        <SpendingChart data={dashboard.spendingByMonth} />
-        <CategoryBreakdown data={dashboard.categoryBreakdown} />
+        <SpendingChart data={dashboard.spendingByMonth} currency={company?.baseCurrency ?? 'INR'} />
+        <CategoryBreakdown data={dashboard.categoryBreakdown} currency={company?.baseCurrency ?? 'INR'} />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
@@ -91,7 +93,7 @@ export default function EmployeeDashboard() {
                 </div>
                 <div className="shrink-0 text-right">
                   <p className="money-text text-sm font-semibold text-card-foreground">
-                    {formatCurrency(expense.amountInBase, 'INR')}
+                    {formatCurrency(expense.amountInBase, company?.baseCurrency ?? expense.baseCurrency ?? 'INR')}
                   </p>
                   <ExpenseStatusBadge status={expense.status} />
                 </div>

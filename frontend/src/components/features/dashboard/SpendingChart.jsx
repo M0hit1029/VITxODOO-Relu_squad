@@ -2,7 +2,7 @@ import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { formatCurrency } from '@/lib/utils'
 
-export function SpendingChart({ title = 'Spending Trend', data, type = 'area' }) {
+export function SpendingChart({ title = 'Spending Trend', data, type = 'area', currency = 'INR' }) {
   return (
     <Card className="h-full">
       <CardHeader>
@@ -15,7 +15,7 @@ export function SpendingChart({ title = 'Spending Trend', data, type = 'area' })
               <CartesianGrid stroke="var(--border)" vertical={false} />
               <XAxis dataKey="month" tick={{ fill: 'var(--muted-foreground)', fontSize: 12 }} />
               <YAxis tick={{ fill: 'var(--muted-foreground)', fontSize: 12 }} />
-              <Tooltip formatter={(value) => formatCurrency(value, 'INR')} />
+              <Tooltip formatter={(value) => formatCurrency(value, currency)} />
               <Bar dataKey="amount" fill="var(--primary)" radius={[12, 12, 0, 0]} />
             </BarChart>
           ) : (
@@ -29,7 +29,7 @@ export function SpendingChart({ title = 'Spending Trend', data, type = 'area' })
               <CartesianGrid stroke="var(--border)" vertical={false} />
               <XAxis dataKey="month" tick={{ fill: 'var(--muted-foreground)', fontSize: 12 }} />
               <YAxis tick={{ fill: 'var(--muted-foreground)', fontSize: 12 }} />
-              <Tooltip formatter={(value) => formatCurrency(value, 'INR')} />
+              <Tooltip formatter={(value) => formatCurrency(value, currency)} />
               <Area type="monotone" dataKey="amount" stroke="var(--primary)" fill="url(#amberArea)" strokeWidth={2.5} />
             </AreaChart>
           )}

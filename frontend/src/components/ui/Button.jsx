@@ -1,5 +1,6 @@
 import { cloneElement, forwardRef, isValidElement } from 'react'
 import { cva } from 'class-variance-authority'
+import { LoaderCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const buttonVariants = cva(
@@ -30,14 +31,28 @@ const buttonVariants = cva(
 )
 
 const Button = forwardRef(function Button(
-  { className, variant, size, type = 'button', asChild = false, children, ...props },
+  {
+    className,
+    variant,
+    size,
+    type = 'button',
+    asChild = false,
+    children,
+    disabled,
+    loading = false,
+    loadingText,
+    ...props
+  },
   ref,
 ) {
   const resolvedClassName = cn(buttonVariants({ variant, size }), className)
+  const isDisabled = disabled || loading
+  const content = loading && loadingText ? loadingText : children
 
   if (asChild && isValidElement(children)) {
     return cloneElement(children, {
       ...props,
+      'aria-busy': loading || undefined,
       className: cn(resolvedClassName, children.props.className),
     })
   }
@@ -47,9 +62,12 @@ const Button = forwardRef(function Button(
       ref={ref}
       type={type}
       className={resolvedClassName}
+      disabled={isDisabled}
+      aria-busy={loading || undefined}
       {...props}
     >
-      {children}
+      {loading && <LoaderCircle className="h-4 w-4 animate-spin" />}
+      {content}
     </button>
   )
 })

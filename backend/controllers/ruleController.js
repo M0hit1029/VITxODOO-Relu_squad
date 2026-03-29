@@ -1,4 +1,5 @@
 const prisma = require('../dbs/db');
+const { serializeRule } = require('../utils/serializers');
 const logger = require('../utils/logger');
 
 const getRules = async (req, res) => {
@@ -37,7 +38,7 @@ const getRules = async (req, res) => {
 			},
 		});
 
-		return res.status(200).json(rules);
+		return res.status(200).json(rules.map(serializeRule));
 	} catch (error) {
 		logger.error(`Failed to fetch rules for company ${req.user?.company_id}: ${error.message}`);
 		return res.status(500).json({ message: 'Failed to fetch rules.' });
@@ -83,14 +84,51 @@ const validateApprovers = async (approvers, companyId) => {
 const createRule = async (req, res) => {
 	try {
 		const {
-			user_id,
-			description,
-			manager_id,
-			is_manager_approver,
-			approvers_sequence,
-			min_approval_percentage,
-			approvers,
+			user_id: requestUserId,
+			description: requestDescription,
+			manager_id: requestManagerId,
+			is_manager_approver: requestManagerApprover,
+			approvers_sequence: requestApproversSequence,
+			min_approval_percentage: requestMinApprovalPercentage,
+			approvers: requestApprovers,
 		} = req.body;
+		const user_id = requestUserId || req.body?.employeeId;
+		const description = requestDescription || req.body?.name;
+		const manager_id =
+			typeof requestManagerId !== 'undefined'
+				? requestManagerId || null
+				: typeof req.body?.managerId !== 'undefined'
+					? req.body?.managerId || null
+					: null;
+		const is_manager_approver =
+			typeof requestManagerApprover !== 'undefined'
+				? requestManagerApprover
+				: req.body?.isManagerRequired;
+		const approvers_sequence =
+			typeof requestApproversSequence !== 'undefined'
+				? requestApproversSequence
+				: req.body?.mode === 'sequential';
+		const min_approval_percentage =
+			typeof requestMinApprovalPercentage !== 'undefined'
+				? requestMinApprovalPercentage
+				: req.body?.minApprovalPercentage;
+		const approvers = Array.isArray(requestApprovers)
+			? requestApprovers
+			: Array.isArray(req.body?.approvers)
+				? req.body.approvers.map((approver, index) => ({
+						user_id: approver.user_id || approver.userId,
+						sequence_order:
+							typeof approver.sequence_order !== 'undefined'
+								? approver.sequence_order
+								: typeof approver.sequenceOrder !== 'undefined'
+									? approver.sequenceOrder
+									: index + 1,
+						is_required:
+							typeof approver.is_required !== 'undefined'
+								? approver.is_required
+								: approver.isRequired,
+				  }))
+				: [];
 
 		if (!user_id || !description) {
 			logger.warn(`Rule creation failed: Missing user_id or description from admin ${req.user.id}`);
@@ -175,7 +213,7 @@ const createRule = async (req, res) => {
 		});
 
 		logger.info(`Rule ${fullRule.id} created successfully by admin ${req.user.id}.`);
-		return res.status(201).json(fullRule);
+		return res.status(201).json(serializeRule(fullRule));
 	} catch (error) {
 		logger.error(`Failed to create rule by admin ${req.user?.id}: ${error.message}`);
 		return res.status(500).json({ message: 'Failed to create rule.' });
@@ -197,14 +235,51 @@ const updateRule = async (req, res) => {
 		}
 
 		const {
-			user_id,
-			description,
-			manager_id,
-			is_manager_approver,
-			approvers_sequence,
-			min_approval_percentage,
-			approvers,
+			user_id: requestUserId,
+			description: requestDescription,
+			manager_id: requestManagerId,
+			is_manager_approver: requestManagerApprover,
+			approvers_sequence: requestApproversSequence,
+			min_approval_percentage: requestMinApprovalPercentage,
+			approvers: requestApprovers,
 		} = req.body;
+		const user_id = requestUserId || req.body?.employeeId;
+		const description = requestDescription || req.body?.name;
+		const manager_id =
+			typeof requestManagerId !== 'undefined'
+				? requestManagerId || null
+				: typeof req.body?.managerId !== 'undefined'
+					? req.body?.managerId || null
+					: undefined;
+		const is_manager_approver =
+			typeof requestManagerApprover !== 'undefined'
+				? requestManagerApprover
+				: req.body?.isManagerRequired;
+		const approvers_sequence =
+			typeof requestApproversSequence !== 'undefined'
+				? requestApproversSequence
+				: req.body?.mode === 'sequential';
+		const min_approval_percentage =
+			typeof requestMinApprovalPercentage !== 'undefined'
+				? requestMinApprovalPercentage
+				: req.body?.minApprovalPercentage;
+		const approvers = Array.isArray(requestApprovers)
+			? requestApprovers
+			: Array.isArray(req.body?.approvers)
+				? req.body.approvers.map((approver, index) => ({
+						user_id: approver.user_id || approver.userId,
+						sequence_order:
+							typeof approver.sequence_order !== 'undefined'
+								? approver.sequence_order
+								: typeof approver.sequenceOrder !== 'undefined'
+									? approver.sequenceOrder
+									: index + 1,
+						is_required:
+							typeof approver.is_required !== 'undefined'
+								? approver.is_required
+								: approver.isRequired,
+				  }))
+				: undefined;
 
 		if (typeof user_id !== 'undefined') {
 			const targetUser = await validateCompanyUser(user_id, req.user.company_id);
@@ -309,7 +384,7 @@ const updateRule = async (req, res) => {
 		});
 
 		logger.info(`Rule ${req.params.id} updated successfully by admin ${req.user.id}.`);
-		return res.status(200).json(updatedRule);
+		return res.status(200).json(serializeRule(updatedRule));
 	} catch (error) {
 		logger.error(`Failed to update rule ${req.params.id} by admin ${req.user?.id}: ${error.message}`);
 		return res.status(500).json({ message: 'Failed to update rule.' });

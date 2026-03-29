@@ -1,6 +1,7 @@
 import { api, withApiFallback } from '@/services/api'
 import { nextId, readDb, updateDb } from '@/services/mockDb'
 import { sleep } from '@/lib/utils'
+import { normalizeUser } from '@/services/normalizers'
 
 async function mockListUsers(filters = {}) {
   await sleep(320)
@@ -25,7 +26,7 @@ async function mockCreateUser(payload) {
       password: 'TempPass123',
       role: payload.role,
       managerId: payload.managerId || null,
-      status: 'invited',
+      status: 'active',
     })
   })
   return updated.users[0]
@@ -46,11 +47,22 @@ async function mockSendPassword() {
   return { success: true }
 }
 
+function applyUserFilters(users, filters = {}) {
+  return users.filter((user) => {
+    if (filters.role && filters.role !== 'all' && user.role !== filters.role) return false
+    if (filters.search) {
+      const haystack = `${user.name} ${user.email}`.toLowerCase()
+      if (!haystack.includes(filters.search.toLowerCase())) return false
+    }
+    return true
+  })
+}
+
 export async function listUsers(filters) {
   return withApiFallback(
     async () => {
-      const response = await api.get('/api/users', { params: filters })
-      return response.data
+      const response = await api.get('/api/users')
+      return applyUserFilters(response.data.map(normalizeUser), filters)
     },
     () => mockListUsers(filters),
   )
@@ -59,8 +71,13 @@ export async function listUsers(filters) {
 export async function createUser(payload) {
   return withApiFallback(
     async () => {
-      const response = await api.post('/api/users', payload)
-      return response.data
+      const response = await api.post('/api/users', {
+        name: payload.fullName,
+        email: payload.email,
+        role: payload.role,
+        managerId: payload.managerId || null,
+      })
+      return normalizeUser(response.data)
     },
     () => mockCreateUser(payload),
   )
@@ -69,8 +86,12 @@ export async function createUser(payload) {
 export async function updateUser(userId, updates) {
   return withApiFallback(
     async () => {
-      const response = await api.put(`/api/users/${userId}`, updates)
-      return response.data
+      const response = await api.put(`/api/users/${userId}`, {
+        name: updates.fullName,
+        role: updates.role,
+        managerId: updates.managerId,
+      })
+      return normalizeUser(response.data)
     },
     () => mockUpdateUser(userId, updates),
   )

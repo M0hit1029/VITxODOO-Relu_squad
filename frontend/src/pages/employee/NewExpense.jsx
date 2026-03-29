@@ -5,17 +5,6 @@ import { getCountries } from '@/services/currencyService'
 import { useExpenses } from '@/hooks/useExpenses'
 import { useAuthStore } from '@/store/authStore'
 
-const defaultValues = {
-  description: '',
-  expenseDate: new Date().toISOString().slice(0, 10),
-  category: 'travel',
-  paidBy: 'Self',
-  amount: 0,
-  currency: 'INR',
-  remarks: '',
-  status: 'draft',
-}
-
 export default function NewExpense() {
   const { persistExpense, submitCurrentExpense } = useExpenses()
   const company = useAuthStore((state) => state.company)
@@ -37,6 +26,17 @@ export default function NewExpense() {
 
   if (!countries.length) {
     return <div className="surface-card p-10 text-center text-muted-foreground">Loading expense form…</div>
+  }
+
+  const defaultValues = {
+    description: '',
+    expenseDate: new Date().toISOString().slice(0, 10),
+    category: 'travel',
+    paidBy: 'Self',
+    amount: 0,
+    currency: company?.baseCurrency ?? 'INR',
+    remarks: '',
+    status: 'draft',
   }
 
   return (

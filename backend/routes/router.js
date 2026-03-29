@@ -5,6 +5,7 @@ const currencyRoutes = require('./currencyRoutes');
 const expenseRoutes = require('./expenseRoutes');
 const approvalRoutes = require('./approvalRoutes');
 const ruleRoutes = require('./ruleRoutes');
+const companyRoutes = require('./companyRoutes');
 
 const router = express.Router();
 
@@ -16,5 +17,6 @@ router.use('/currency', currencyRoutes);
 router.use('/expenses', expenseRoutes);
 router.use('/approvals', approvalRoutes);
 router.use('/rules', ruleRoutes);
+router.use('/company', companyRoutes);
 
 module.exports = router;

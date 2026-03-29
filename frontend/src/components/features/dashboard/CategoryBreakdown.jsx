@@ -4,7 +4,7 @@ import { formatCurrency } from '@/lib/utils'
 
 const colors = ['var(--primary)', 'var(--success)', 'var(--warning)', 'var(--destructive)', '#5b8ff9', '#36cfc9']
 
-export function CategoryBreakdown({ data }) {
+export function CategoryBreakdown({ data, currency = 'INR' }) {
   return (
     <Card className="h-full">
       <CardHeader>
@@ -18,7 +18,7 @@ export function CategoryBreakdown({ data }) {
                 <Cell key={entry.name} fill={colors[index % colors.length]} />
               ))}
             </Pie>
-            <Tooltip formatter={(value) => formatCurrency(value, 'INR')} />
+            <Tooltip formatter={(value) => formatCurrency(value, currency)} />
           </PieChart>
         </ResponsiveContainer>
       </CardContent>

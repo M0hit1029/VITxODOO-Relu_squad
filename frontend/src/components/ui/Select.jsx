@@ -8,14 +8,16 @@ export function Select({
   options,
   placeholder = 'Select an option',
   className,
+  disabled = false,
 }) {
   return (
-    <RadixSelect.Root value={value} onValueChange={onValueChange}>
+    <RadixSelect.Root value={value} onValueChange={onValueChange} disabled={disabled}>
       <RadixSelect.Trigger
         className={cn(
-          'flex h-11 w-full items-center justify-between rounded-xl border border-input/80 bg-background/80 px-3.5 text-sm text-foreground shadow-sm outline-none transition-all focus:border-primary/60 focus:ring-2 focus:ring-primary/15',
+          'flex h-11 w-full items-center justify-between rounded-xl border border-input/80 bg-background/80 px-3.5 text-sm text-foreground shadow-sm outline-none transition-all focus:border-primary/60 focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:opacity-60',
           className,
         )}
+        disabled={disabled}
       >
         <RadixSelect.Value placeholder={placeholder} />
         <RadixSelect.Icon>

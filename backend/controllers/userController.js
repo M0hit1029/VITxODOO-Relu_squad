@@ -2,6 +2,7 @@ const prisma = require('../dbs/db');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const emailService = require('../services/emailService');
+const { serializeUser } = require('../utils/serializers');
 const logger = require('../utils/logger');
 
 const getUsers = async (req, res) => {
@@ -29,7 +30,7 @@ const getUsers = async (req, res) => {
 			},
 		});
 
-		return res.status(200).json(users);
+		return res.status(200).json(users.map((user) => serializeUser(user)));
 	} catch (error) {
 		logger.error(`Failed to fetch users for company ${req.user.company_id}: ${error.message}`);
 		return res.status(500).json({ message: 'Failed to fetch users.' });
@@ -38,7 +39,10 @@ const getUsers = async (req, res) => {
 
 const createUser = async (req, res) => {
 	try {
-		const { name, email, role, manager_id } = req.body;
+		const name = req.body?.name || req.body?.fullName;
+		const email = req.body?.email;
+		const role = req.body?.role;
+		const manager_id = req.body?.manager_id || req.body?.managerId || null;
 
 		if (!name || !email || !role) {
 			logger.warn(`User creation failed: Missing required fields by ${req.user.email}`);
@@ -93,13 +97,19 @@ const createUser = async (req, res) => {
 				manager_id: true,
 				company_id: true,
 				created_at: true,
+				manager: {
+					select: {
+						id: true,
+						name: true,
+					},
+				},
 			},
 		});
 
 		await emailService.sendPasswordEmail(email, rawPassword);
 
 		logger.info(`User ${email} created successfully by admin ${req.user.email}.`);
-		return res.status(201).json(user);
+		return res.status(201).json(serializeUser(user, { status: 'active' }));
 	} catch (error) {
 		logger.error(`User creation failed by admin ${req.user?.email}: ${error.message}`);
 		return res.status(500).json({ message: 'Failed to create user.' });
@@ -109,7 +119,14 @@ const createUser = async (req, res) => {
 const updateUser = async (req, res) => {
 	try {
 		const { id } = req.params;
-		const { name, role, manager_id } = req.body;
+		const name = req.body?.name || req.body?.fullName;
+		const role = req.body?.role;
+		const manager_id =
+			typeof req.body?.managerId !== 'undefined'
+				? req.body?.managerId || null
+				: typeof req.body?.manager_id !== 'undefined'
+					? req.body?.manager_id || null
+					: undefined;
 
 		const existingUser = await prisma.user.findFirst({
 			where: {
@@ -166,11 +183,17 @@ const updateUser = async (req, res) => {
 				manager_id: true,
 				company_id: true,
 				created_at: true,
+				manager: {
+					select: {
+						id: true,
+						name: true,
+					},
+				},
 			},
 		});
 
 		logger.info(`User ${id} updated successfully by admin ${req.user.email}.`);
-		return res.status(200).json(updatedUser);
+		return res.status(200).json(serializeUser(updatedUser));
 	} catch (error) {
 		logger.error(`User update failed by admin ${req.user?.email}: ${error.message}`);
 		return res.status(500).json({ message: 'Failed to update user.' });

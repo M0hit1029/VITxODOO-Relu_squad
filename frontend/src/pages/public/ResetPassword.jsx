@@ -2,7 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { motion } from 'framer-motion'
 import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Button } from '@/components/ui/Button'
 import { Card, CardContent } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
@@ -11,6 +11,7 @@ import { useAuth } from '@/hooks/useAuth'
 
 export default function ResetPassword() {
   const navigate = useNavigate()
+  const [params] = useSearchParams()
   const { resetPassword } = useAuth()
   const [submitted, setSubmitted] = useState(false)
   const form = useForm({
@@ -25,7 +26,10 @@ export default function ResetPassword() {
   }, [navigate, submitted])
 
   const onSubmit = form.handleSubmit(async (values) => {
-    await resetPassword(values)
+    await resetPassword({
+      ...values,
+      token: params.get('token'),
+    })
     setSubmitted(true)
   })
 

@@ -10,18 +10,21 @@ import { Modal } from '@/components/ui/Modal'
 import { Select } from '@/components/ui/Select'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { useExpenses } from '@/hooks/useExpenses'
-import { updateDb } from '@/services/mockDb'
+import { overrideExpenseStatus } from '@/services/expenseService'
+import { useAuthStore } from '@/store/authStore'
 
 export default function AllExpenses() {
-  const { expenses, fetchExpenses, filters, setFilters } = useExpenses()
+  const { expenses, fetchExpenses, filters, setFilters, isLoading } = useExpenses()
+  const company = useAuthStore((state) => state.company)
   const [overrideExpense, setOverrideExpense] = useState(null)
+  const [overrideDecision, setOverrideDecision] = useState(null)
 
   useEffect(() => {
     fetchExpenses({ filters })
   }, [fetchExpenses, filters])
 
   const exportCsv = () => {
-    const header = 'Description,Employee,Status,Amount INR\n'
+    const header = `Description,Employee,Status,Amount ${company?.baseCurrency ?? 'INR'}\n`
     const rows = expenses
       .map((expense) => `${expense.description},${expense.employeeName},${expense.status},${expense.amountInBase}`)
       .join('\n')
@@ -43,7 +46,9 @@ export default function AllExpenses() {
           <p className="money-text text-sm font-semibold text-card-foreground">
             {formatCurrency(row.amount, row.currency)}
           </p>
-          <p className="text-xs text-muted-foreground">≈ {formatCurrency(row.amountInBase, 'INR')}</p>
+          <p className="text-xs text-muted-foreground">
+            ≈ {formatCurrency(row.amountInBase, company?.baseCurrency ?? row.baseCurrency ?? 'INR')}
+          </p>
         </div>
       ),
     },
@@ -107,7 +112,7 @@ export default function AllExpenses() {
         </CardContent>
       </Card>
 
-      <DataTable columns={columns} data={expenses} />
+      <DataTable columns={columns} data={expenses} loading={isLoading} />
 
       <Modal
         open={Boolean(overrideExpense)}
@@ -116,35 +121,43 @@ export default function AllExpenses() {
         description="Force approve or reject this expense as an admin."
         footer={
           <div className="flex items-center justify-end gap-2">
-            <Button variant="ghost" onClick={() => setOverrideExpense(null)}>
+            <Button variant="ghost" onClick={() => setOverrideExpense(null)} disabled={Boolean(overrideDecision)}>
               Cancel
             </Button>
             <Button
               variant="destructive"
-              onClick={() => {
+              onClick={async () => {
                 if (!overrideExpense) return
-                updateDb((db) => {
-                  const expense = db.expenses.find((entry) => entry.id === overrideExpense.id)
-                  if (expense) expense.status = 'rejected'
-                })
-                setOverrideExpense(null)
-                toast.success('Expense rejected by override.')
-                fetchExpenses({ filters })
+                setOverrideDecision('rejected')
+                try {
+                  await overrideExpenseStatus(overrideExpense.id, 'rejected', 'Rejected by admin override.')
+                  setOverrideExpense(null)
+                  toast.success('Expense rejected by override.')
+                  await fetchExpenses({ filters })
+                } finally {
+                  setOverrideDecision(null)
+                }
               }}
+              loading={overrideDecision === 'rejected'}
+              loadingText="Rejecting..."
             >
               Force Reject
             </Button>
             <Button
-              onClick={() => {
+              onClick={async () => {
                 if (!overrideExpense) return
-                updateDb((db) => {
-                  const expense = db.expenses.find((entry) => entry.id === overrideExpense.id)
-                  if (expense) expense.status = 'approved'
-                })
-                setOverrideExpense(null)
-                toast.success('Expense approved by override.')
-                fetchExpenses({ filters })
+                setOverrideDecision('approved')
+                try {
+                  await overrideExpenseStatus(overrideExpense.id, 'approved', 'Approved by admin override.')
+                  setOverrideExpense(null)
+                  toast.success('Expense approved by override.')
+                  await fetchExpenses({ filters })
+                } finally {
+                  setOverrideDecision(null)
+                }
               }}
+              loading={overrideDecision === 'approved'}
+              loadingText="Approving..."
             >
               Force Approve
             </Button>

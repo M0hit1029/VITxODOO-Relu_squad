@@ -50,7 +50,7 @@ export const expenseSchema = z.object({
 export const createUserSchema = z.object({
   fullName: z.string().min(3, 'Enter the user name.'),
   email: z.email('Enter a valid email address.'),
-  role: z.enum(['admin', 'manager', 'employee']),
+  role: z.enum(['manager', 'employee']),
   managerId: z.string().optional(),
 })
 

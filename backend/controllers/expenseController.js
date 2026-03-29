@@ -1,12 +1,16 @@
 const prisma = require('../dbs/db');
 const currencyService = require('../services/currencyService');
 const upload = require('../src/config/upload');
+const { getBackendCategory, serializeExpense } = require('../utils/serializers');
 const logger = require('../utils/logger');
 
 const allowedCategories = [
 	'Food',
 	'Travel',
 	'Accommodation',
+	'Software/Tools',
+	'Supplies',
+	'Utilities',
 	'Miscellaneous',
 	'Entertainment',
 	'Medical',
@@ -29,6 +33,77 @@ const canAccessExpense = (user, expense) => {
 	return false;
 };
 
+const findExpenseById = (expenseId) =>
+	prisma.expense.findUnique({
+		where: {
+			id: expenseId,
+		},
+		include: {
+			company: {
+				select: {
+					base_currency: true,
+				},
+			},
+			employee: {
+				select: {
+					id: true,
+					name: true,
+					email: true,
+					role: true,
+					manager_id: true,
+				},
+			},
+			expense_logs: {
+				include: {
+					actor: {
+						select: {
+							name: true,
+						},
+					},
+				},
+				orderBy: {
+					timestamp: 'asc',
+				},
+			},
+			approval_requests: {
+				include: {
+					approver: {
+						select: {
+							id: true,
+							name: true,
+							role: true,
+						},
+					},
+				},
+				orderBy: {
+					sequence_order: 'asc',
+				},
+			},
+		},
+	});
+
+const buildExpensePayload = (body = {}, file) => {
+	const category = getBackendCategory(body.category);
+
+	return {
+		description: body.description,
+		category,
+		expense_date: body.expense_date || body.expenseDate,
+		amount: body.amount,
+		currency: body.currency,
+		paid_by: body.paid_by || body.paidBy,
+		remarks: body.remarks,
+		receipt_url: body.receipt_url || body.receiptUrl,
+		amount_in_base:
+			typeof body.amount_in_base !== 'undefined'
+				? body.amount_in_base
+				: typeof body.amountInBase !== 'undefined'
+					? body.amountInBase
+					: undefined,
+		file,
+	};
+};
+
 const getExpenses = async (req, res) => {
 	try {
 		const companyId = req.user.company_id;
@@ -44,56 +119,24 @@ const getExpenses = async (req, res) => {
 		if (req.user.role === 'manager') {
 			where = {
 				company_id: companyId,
-				OR: [
-					{ employee_id: req.user.id },
-					{ employee: { manager_id: req.user.id } },
-				],
+				OR: [{ employee_id: req.user.id }, { employee: { manager_id: req.user.id } }],
 			};
 		}
 
 		const expenses = await prisma.expense.findMany({
 			where,
 			include: {
-				employee: {
+				company: {
 					select: {
-						name: true,
-						email: true,
+						base_currency: true,
 					},
 				},
-				expense_logs: {
-					include: {
-						actor: {
-							select: {
-								name: true,
-							},
-						},
-					},
-				},
-			},
-			orderBy: {
-				created_at: 'desc',
-			},
-		});
-
-		return res.status(200).json(expenses);
-	} catch (error) {
-		logger.error(`Failed to fetch expenses for company ${req.user.company_id}: ${error.message}`);
-		return res.status(500).json({ message: 'Failed to fetch expenses.' });
-	}
-};
-
-const getExpense = async (req, res) => {
-	try {
-		const expense = await prisma.expense.findUnique({
-			where: {
-				id: req.params.id,
-			},
-			include: {
 				employee: {
 					select: {
 						id: true,
 						name: true,
 						email: true,
+						role: true,
 						manager_id: true,
 					},
 				},
@@ -105,18 +148,26 @@ const getExpense = async (req, res) => {
 							},
 						},
 					},
-				},
-				approval_requests: {
-					include: {
-						approver: {
-							select: {
-								name: true,
-							},
-						},
+					orderBy: {
+						timestamp: 'asc',
 					},
 				},
 			},
+			orderBy: {
+				created_at: 'desc',
+			},
 		});
+
+		return res.status(200).json(expenses.map((expense) => serializeExpense(expense)));
+	} catch (error) {
+		logger.error(`Failed to fetch expenses for company ${req.user.company_id}: ${error.message}`);
+		return res.status(500).json({ message: 'Failed to fetch expenses.' });
+	}
+};
+
+const getExpense = async (req, res) => {
+	try {
+		const expense = await findExpenseById(req.params.id);
 
 		if (!expense || expense.company_id !== req.user.company_id) {
 			return res.status(404).json({ message: 'Expense not found.' });
@@ -127,7 +178,7 @@ const getExpense = async (req, res) => {
 			return res.status(403).json({ message: 'Forbidden' });
 		}
 
-		return res.status(200).json(expense);
+		return res.status(200).json(serializeExpense(expense));
 	} catch (error) {
 		logger.error(`Failed to fetch expense ${req.params.id}: ${error.message}`);
 		return res.status(500).json({ message: 'Failed to fetch expense.' });
@@ -136,6 +187,7 @@ const getExpense = async (req, res) => {
 
 const createExpense = async (req, res) => {
 	try {
+		const payload = buildExpensePayload(req.body, req.file);
 		const {
 			description,
 			category,
@@ -144,7 +196,9 @@ const createExpense = async (req, res) => {
 			currency,
 			paid_by,
 			remarks,
-		} = req.body;
+			receipt_url,
+			amount_in_base,
+		} = payload;
 
 		if (!description || !category || !expense_date || !amount || !currency || !paid_by) {
 			logger.warn(`Expense creation failed: Missing fields from user ${req.user.id}`);
@@ -162,9 +216,12 @@ const createExpense = async (req, res) => {
 			return res.status(400).json({ message: 'Invalid amount.' });
 		}
 
-		const receipt_url = req.file ? `/uploads/${req.file.filename}` : null;
+		const amountInBase =
+			typeof amount_in_base !== 'undefined' && amount_in_base !== null && amount_in_base !== ''
+				? parseFloat(amount_in_base)
+				: null;
 
-		const expense = await prisma.expense.create({
+		const createdExpense = await prisma.expense.create({
 			data: {
 				company_id: req.user.company_id,
 				employee_id: req.user.id,
@@ -175,22 +232,25 @@ const createExpense = async (req, res) => {
 				currency,
 				paid_by,
 				remarks: remarks || null,
-				receipt_url,
+				receipt_url: payload.file ? `/uploads/${payload.file.filename}` : receipt_url || null,
 				status: 'draft',
+				amount_in_base: Number.isFinite(amountInBase) ? amountInBase : null,
 			},
 		});
 
 		await prisma.expenseLog.create({
 			data: {
-				expense_id: expense.id,
+				expense_id: createdExpense.id,
 				actor_id: req.user.id,
 				action: 'created',
 				note: 'Expense created as draft',
 			},
 		});
 
-		logger.info(`Expense ${expense.id} created successfully by user ${req.user.id}.`);
-		return res.status(201).json(expense);
+		const expense = await findExpenseById(createdExpense.id);
+
+		logger.info(`Expense ${createdExpense.id} created successfully by user ${req.user.id}.`);
+		return res.status(201).json(serializeExpense(expense));
 	} catch (error) {
 		logger.error(`Failed to create expense for user ${req.user?.id}: ${error.message}`);
 		return res.status(500).json({ message: 'Failed to create expense.' });
@@ -217,64 +277,70 @@ const updateExpense = async (req, res) => {
 			return res.status(403).json({ message: 'Forbidden' });
 		}
 
-		const {
-			description,
-			category,
-			expense_date,
-			amount,
-			currency,
-			paid_by,
-			remarks,
-			receipt_url,
-		} = req.body;
-
-		if (typeof category !== 'undefined' && !allowedCategories.includes(category)) {
-			return res.status(400).json({ message: 'Invalid category.' });
-		}
-
+		const payload = buildExpensePayload(req.body, req.file);
 		const data = {};
 
-		if (typeof description !== 'undefined') {
-			data.description = description;
+		if (typeof payload.description !== 'undefined') {
+			data.description = payload.description;
 		}
-		if (typeof category !== 'undefined') {
-			data.category = category;
+
+		if (typeof payload.category !== 'undefined') {
+			if (!allowedCategories.includes(payload.category)) {
+				return res.status(400).json({ message: 'Invalid category.' });
+			}
+			data.category = payload.category;
 		}
-		if (typeof expense_date !== 'undefined') {
-			data.expense_date = new Date(expense_date);
+
+		if (typeof payload.expense_date !== 'undefined') {
+			data.expense_date = new Date(payload.expense_date);
 		}
-		if (typeof amount !== 'undefined') {
-			const numericAmount = parseFloat(amount);
+
+		if (typeof payload.amount !== 'undefined') {
+			const numericAmount = parseFloat(payload.amount);
 			if (Number.isNaN(numericAmount)) {
 				return res.status(400).json({ message: 'Invalid amount.' });
 			}
 			data.amount = numericAmount;
 		}
-		if (typeof currency !== 'undefined') {
-			data.currency = currency;
-		}
-		if (typeof paid_by !== 'undefined') {
-			data.paid_by = paid_by;
-		}
-		if (typeof remarks !== 'undefined') {
-			data.remarks = remarks;
-		}
-		if (typeof receipt_url !== 'undefined') {
-			data.receipt_url = receipt_url;
-		}
-		if (req.file) {
-			data.receipt_url = `/uploads/${req.file.filename}`;
+
+		if (typeof payload.currency !== 'undefined') {
+			data.currency = payload.currency;
 		}
 
-		const updatedExpense = await prisma.expense.update({
+		if (typeof payload.paid_by !== 'undefined') {
+			data.paid_by = payload.paid_by;
+		}
+
+		if (typeof payload.remarks !== 'undefined') {
+			data.remarks = payload.remarks;
+		}
+
+		if (typeof payload.receipt_url !== 'undefined') {
+			data.receipt_url = payload.receipt_url;
+		}
+
+		if (typeof payload.amount_in_base !== 'undefined') {
+			const parsedAmountInBase = parseFloat(payload.amount_in_base);
+			if (!Number.isNaN(parsedAmountInBase)) {
+				data.amount_in_base = parsedAmountInBase;
+			}
+		}
+
+		if (payload.file) {
+			data.receipt_url = `/uploads/${payload.file.filename}`;
+		}
+
+		await prisma.expense.update({
 			where: {
 				id: req.params.id,
 			},
 			data,
 		});
 
+		const updatedExpense = await findExpenseById(req.params.id);
+
 		logger.info(`Expense ${req.params.id} updated successfully by user ${req.user.id}.`);
-		return res.status(200).json(updatedExpense);
+		return res.status(200).json(serializeExpense(updatedExpense));
 	} catch (error) {
 		logger.error(`Failed to update expense ${req.params.id} by user ${req.user?.id}: ${error.message}`);
 		return res.status(500).json({ message: 'Failed to update expense.' });
@@ -312,11 +378,11 @@ const submitExpense = async (req, res) => {
 			converted = await currencyService.convertCurrency(
 				expense.amount,
 				expense.currency,
-				expense.company.base_currency
+				expense.company.base_currency,
 			);
 		} catch (error) {
 			if (error.message === 'CONVERSION_FAILED') {
-				converted = null;
+				converted = expense.amount_in_base || null;
 				logNote = 'Currency conversion failed. Amount stored in original currency.';
 				logger.warn(`Currency conversion failed when submitting expense ${expense.id}: ${error.message}`);
 			} else {
@@ -324,7 +390,7 @@ const submitExpense = async (req, res) => {
 			}
 		}
 
-		const updatedExpense = await prisma.expense.update({
+		await prisma.expense.update({
 			where: {
 				id: expense.id,
 			},
@@ -346,11 +412,72 @@ const submitExpense = async (req, res) => {
 		const { triggerApprovalFlow } = require('../services/approvalEngine');
 		await triggerApprovalFlow(expense.id);
 
+		const submittedExpense = await findExpenseById(expense.id);
+
 		logger.info(`Expense ${expense.id} submitted for approval by user ${req.user.id}.`);
-		return res.status(200).json(updatedExpense);
+		return res.status(200).json(serializeExpense(submittedExpense));
 	} catch (error) {
 		logger.error(`Failed to submit expense ${req.params.id} by user ${req.user?.id}: ${error.message}`);
 		return res.status(500).json({ message: 'Failed to submit expense.' });
+	}
+};
+
+const overrideExpenseStatus = async (req, res) => {
+	try {
+		const decision = req.body?.decision;
+		const comment = req.body?.comment || 'Resolved by admin override.';
+
+		if (!['approved', 'rejected'].includes(decision)) {
+			return res.status(400).json({ message: 'decision must be approved or rejected.' });
+		}
+
+		const expense = await prisma.expense.findUnique({
+			where: {
+				id: req.params.id,
+			},
+		});
+
+		if (!expense || expense.company_id !== req.user.company_id) {
+			return res.status(404).json({ message: 'Expense not found.' });
+		}
+
+		await prisma.expense.update({
+			where: {
+				id: expense.id,
+			},
+			data: {
+				status: decision,
+			},
+		});
+
+		await prisma.approvalRequest.updateMany({
+			where: {
+				expense_id: expense.id,
+				status: 'pending',
+			},
+			data: {
+				status: decision,
+				comments: comment,
+				decided_at: new Date(),
+			},
+		});
+
+		await prisma.expenseLog.create({
+			data: {
+				expense_id: expense.id,
+				actor_id: req.user.id,
+				action: decision,
+				note: `Admin override: ${comment}`,
+			},
+		});
+
+		const overriddenExpense = await findExpenseById(expense.id);
+
+		logger.info(`Expense ${expense.id} ${decision} by admin override from user ${req.user.id}.`);
+		return res.status(200).json(serializeExpense(overriddenExpense));
+	} catch (error) {
+		logger.error(`Failed to override expense ${req.params.id} by admin ${req.user?.id}: ${error.message}`);
+		return res.status(500).json({ message: 'Failed to override expense.' });
 	}
 };
 
@@ -393,7 +520,16 @@ const getLogs = async (req, res) => {
 			},
 		});
 
-		return res.status(200).json(logs);
+		return res.status(200).json(
+			logs.map((log) => ({
+				id: log.id,
+				actorId: log.actor_id,
+				actorName: log.actor?.name || 'System',
+				action: log.action,
+				note: log.note || '',
+				timestamp: log.timestamp,
+			})),
+		);
 	} catch (error) {
 		logger.error(`Failed to fetch logs for expense ${req.params.id}: ${error.message}`);
 		return res.status(500).json({ message: 'Failed to fetch logs.' });
@@ -408,7 +544,7 @@ const uploadReceipt = async (req, res) => {
 
 	logger.info(`Receipt uploaded: ${req.file.filename}`);
 	return res.status(200).json({
-		receipt_url: `/uploads/${req.file.filename}`,
+		receiptUrl: `/uploads/${req.file.filename}`,
 	});
 };
 
@@ -418,6 +554,7 @@ module.exports = {
 	createExpense,
 	updateExpense,
 	submitExpense,
+	overrideExpenseStatus,
 	getLogs,
 	uploadReceipt,
 	upload,

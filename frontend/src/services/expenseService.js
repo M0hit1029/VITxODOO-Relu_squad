@@ -12,27 +12,20 @@ import { api, withApiFallback } from '@/services/api'
 import { CATEGORIES } from '@/lib/constants'
 import { nextId, readDb, updateDb } from '@/services/mockDb'
 import { sleep } from '@/lib/utils'
+import { normalizeExpense, normalizeQueueItem, normalizeUser, toBackendCategory } from '@/services/normalizers'
+import { useAuthStore } from '@/store/authStore'
 
-function getEmployee(expense, users) {
-  return users.find((user) => user.id === expense.employeeId)
+function getBaseCurrency() {
+  return useAuthStore.getState().company?.baseCurrency ?? 'INR'
 }
 
-function matchesRole(expense, user) {
-  if (!user) return false
-  if (user.role === 'admin') return true
-  if (user.role === 'manager') {
-    return expense.employeeId === user.id || expense.approvalChain?.some((step) => step.approverId === user.id)
-  }
-  return expense.employeeId === user.id
-}
-
-function matchesFilters(expense, filters) {
+function matchesFilters(expense, filters = {}) {
   if (filters.status && filters.status !== 'all' && expense.status !== filters.status) return false
   if (filters.category && filters.category !== 'all' && expense.category !== filters.category) return false
   if (filters.categories?.length && !filters.categories.includes(expense.category)) return false
 
   if (filters.search) {
-    const haystack = `${expense.description} ${expense.remarks ?? ''}`.toLowerCase()
+    const haystack = `${expense.description} ${expense.remarks ?? ''} ${expense.employeeName ?? ''}`.toLowerCase()
     if (!haystack.includes(filters.search.toLowerCase())) return false
   }
 
@@ -49,20 +42,223 @@ function matchesFilters(expense, filters) {
   return true
 }
 
+function paginate(items, page = 1, limit = 10) {
+  const start = (page - 1) * limit
+  return items.slice(start, start + limit)
+}
+
+function buildExpenseFormData(payload) {
+  const formData = new FormData()
+
+  const fields = {
+    description: payload.description,
+    category: toBackendCategory(payload.category),
+    expenseDate: payload.expenseDate,
+    amount: payload.amount,
+    currency: payload.currency,
+    paidBy: payload.paidBy,
+    remarks: payload.remarks ?? '',
+    amountInBase: payload.amountInBase ?? '',
+    receiptUrl: payload.receiptUrl ?? '',
+  }
+
+  Object.entries(fields).forEach(([key, value]) => {
+    if (typeof value !== 'undefined' && value !== null && value !== '') {
+      formData.append(key, value)
+    }
+  })
+
+  if (payload.receiptFile instanceof File) {
+    formData.append('receipt', payload.receiptFile)
+  }
+
+  return formData
+}
+
+async function fetchExpensesFromApi() {
+  const response = await api.get('/api/expenses')
+  return response.data.map(normalizeExpense)
+}
+
+function buildStats(expenses, baseCurrency) {
+  const currentMonthStart = startOfMonth(new Date())
+  return [
+    {
+      label: 'Total Submitted',
+      value: expenses
+        .filter((expense) => new Date(expense.expenseDate) >= currentMonthStart)
+        .reduce((sum, expense) => sum + Number(expense.amountInBase), 0),
+      kind: 'currency',
+      currency: baseCurrency,
+    },
+    {
+      label: 'Pending Approval',
+      value: expenses.filter((expense) => expense.status === 'submitted').length,
+      kind: 'count',
+    },
+    {
+      label: 'Approved This Month',
+      value: expenses
+        .filter((expense) => expense.status === 'approved' && new Date(expense.updatedAt ?? expense.expenseDate) >= currentMonthStart)
+        .reduce((sum, expense) => sum + Number(expense.amountInBase), 0),
+      kind: 'currency',
+      currency: baseCurrency,
+    },
+    {
+      label: 'Rejected',
+      value: expenses.filter((expense) => expense.status === 'rejected').length,
+      kind: 'count',
+      color: 'destructive',
+    },
+  ]
+}
+
+async function buildEmployeeDashboard() {
+  const expenses = await fetchExpensesFromApi()
+  const baseCurrency = getBaseCurrency()
+  const interval = {
+    start: startOfMonth(subMonths(new Date(), 5)),
+    end: endOfMonth(new Date()),
+  }
+
+  const spendingByMonth = eachMonthOfInterval(interval).map((month) => {
+    const monthKey = format(month, 'yyyy-MM')
+    const monthTotal = expenses
+      .filter((expense) => format(parseISO(expense.expenseDate), 'yyyy-MM') === monthKey)
+      .reduce((sum, expense) => sum + Number(expense.amountInBase), 0)
+    return { month: format(month, 'MMM'), amount: monthTotal }
+  })
+
+  const categoryBreakdown = CATEGORIES.map((category) => ({
+    name: category.label,
+    value: expenses
+      .filter((expense) => expense.category === category.value)
+      .reduce((sum, expense) => sum + Number(expense.amountInBase), 0),
+  })).filter((entry) => entry.value > 0)
+
+  return {
+    stats: buildStats(expenses, baseCurrency),
+    spendingByMonth,
+    categoryBreakdown,
+    recentExpenses: expenses
+      .slice()
+      .sort((left, right) => new Date(right.updatedAt ?? right.expenseDate) - new Date(left.updatedAt ?? left.expenseDate))
+      .slice(0, 5),
+  }
+}
+
+async function buildAdminDashboard() {
+  const [expenses, usersResponse] = await Promise.all([fetchExpensesFromApi(), api.get('/api/users')])
+  const users = usersResponse.data.map(normalizeUser)
+  const baseCurrency = getBaseCurrency()
+
+  return {
+    stats: [
+      {
+        label: 'Company Spend',
+        value: expenses.reduce((sum, expense) => sum + Number(expense.amountInBase), 0),
+        kind: 'currency',
+        currency: baseCurrency,
+      },
+      {
+        label: 'Pending Reviews',
+        value: expenses.filter((expense) => expense.status === 'submitted').length,
+        kind: 'count',
+      },
+      {
+        label: 'Approved Expenses',
+        value: expenses.filter((expense) => expense.status === 'approved').length,
+        kind: 'count',
+      },
+      {
+        label: 'Team Members',
+        value: users.length,
+        kind: 'count',
+      },
+    ],
+    recentExpenses: expenses
+      .slice()
+      .sort((left, right) => new Date(right.updatedAt ?? right.expenseDate) - new Date(left.updatedAt ?? left.expenseDate))
+      .slice(0, 6),
+  }
+}
+
+async function buildManagerDashboard() {
+  const [expenses, queueResponse] = await Promise.all([
+    fetchExpensesFromApi(),
+    api.get('/api/approvals/pending'),
+  ])
+
+  const queue = queueResponse.data.map(normalizeQueueItem)
+  const baseCurrency = getBaseCurrency()
+  const currentMonthStart = startOfMonth(new Date())
+
+  const stats = [
+    {
+      label: 'Pending My Approval',
+      value: queue.filter((item) => item.status === 'pending').length,
+      kind: 'count',
+    },
+    {
+      label: 'Approved This Month',
+      value: queue.filter((item) => item.status === 'approved' && new Date(item.createdAt) >= currentMonthStart).length,
+      kind: 'count',
+      color: 'success',
+    },
+    {
+      label: 'Rejected This Month',
+      value: queue.filter((item) => item.status === 'rejected' && new Date(item.createdAt) >= currentMonthStart).length,
+      kind: 'count',
+      color: 'destructive',
+    },
+    {
+      label: 'Total Value Pending',
+      value: queue
+        .filter((item) => item.status === 'pending')
+        .reduce((sum, item) => sum + Number(item.amountInBase), 0),
+      kind: 'currency',
+      currency: baseCurrency,
+    },
+  ]
+
+  const totals = new Map()
+  expenses.forEach((expense) => {
+    const current = totals.get(expense.employeeName) ?? 0
+    totals.set(expense.employeeName, current + Number(expense.amountInBase))
+  })
+
+  return {
+    stats,
+    teamChart: [...totals.entries()].map(([employeeName, amount]) => ({
+      month: employeeName.split(' ')[0],
+      amount,
+    })),
+    pendingApprovals: queue.filter((item) => item.status === 'pending').slice(0, 5),
+  }
+}
+
+function getEmployee(expense, users) {
+  return users.find((user) => user.id === expense.employeeId)
+}
+
+function matchesRole(expense, user) {
+  if (!user) return false
+  if (user.role === 'admin') return true
+  if (user.role === 'manager') {
+    return expense.employeeId === user.id || expense.approvalChain?.some((step) => step.approverId === user.id)
+  }
+  return expense.employeeId === user.id
+}
+
 function decorateExpenses(expenses, users) {
   return expenses.map((expense) => {
     const employee = getEmployee(expense, users)
     return {
       ...expense,
       employee,
-      employeeName: employee?.name ?? 'Unknown',
+      employeeName: employee?.name ?? expense.employeeName ?? 'Unknown',
     }
   })
-}
-
-function paginate(items, page = 1, limit = 10) {
-  const start = (page - 1) * limit
-  return items.slice(start, start + limit)
 }
 
 function buildApprovalChain(db, employeeId) {
@@ -234,10 +430,10 @@ async function mockGetEmployeeDashboard(user) {
 
   return {
     stats: [
-      { label: 'Total Submitted', value: totalSubmitted, kind: 'currency' },
+      { label: 'Total Submitted', value: totalSubmitted, kind: 'currency', currency: getBaseCurrency() },
       { label: 'Pending Approval', value: pendingCount, kind: 'count' },
-      { label: 'Approved This Month', value: approvedThisMonth, kind: 'currency' },
-      { label: 'Rejected', value: rejectedCount, kind: 'count' },
+      { label: 'Approved This Month', value: approvedThisMonth, kind: 'currency', currency: getBaseCurrency() },
+      { label: 'Rejected', value: rejectedCount, kind: 'count', color: 'destructive' },
     ],
     spendingByMonth,
     categoryBreakdown,
@@ -255,7 +451,7 @@ async function mockGetAdminDashboard() {
   const approved = db.expenses.filter((expense) => expense.status === 'approved')
   return {
     stats: [
-      { label: 'Company Spend', value: totalCompanySpend, kind: 'currency' },
+      { label: 'Company Spend', value: totalCompanySpend, kind: 'currency', currency: getBaseCurrency() },
       { label: 'Pending Reviews', value: pending.length, kind: 'count' },
       { label: 'Approved Expenses', value: approved.length, kind: 'count' },
       { label: 'Team Members', value: db.users.length, kind: 'count' },
@@ -285,6 +481,7 @@ async function mockGetManagerDashboard(user) {
       label: 'Total Value Pending',
       value: pending.reduce((sum, expense) => sum + Number(expense.amountInBase), 0),
       kind: 'currency',
+      currency: getBaseCurrency(),
     },
   ]
 
@@ -294,7 +491,7 @@ async function mockGetManagerDashboard(user) {
     totals.set(expense.employeeId, current + Number(expense.amountInBase))
   })
   const teamChart = [...totals.entries()].map(([employeeId, amount]) => {
-    const employee = db.users.find((u) => u.id === employeeId)
+    const employee = db.users.find((entry) => entry.id === employeeId)
     return { month: employee?.name?.split(' ')[0] ?? employeeId, amount }
   })
 
@@ -308,8 +505,12 @@ async function mockGetManagerDashboard(user) {
 export async function listExpenses(params) {
   return withApiFallback(
     async () => {
-      const response = await api.get('/api/expenses', { params })
-      return response.data
+      const expenses = await fetchExpensesFromApi()
+      const filtered = expenses.filter((expense) => matchesFilters(expense, params.filters))
+      return {
+        data: paginate(filtered, params.page, params.limit),
+        total: filtered.length,
+      }
     },
     () => mockListExpenses(params),
   )
@@ -319,7 +520,7 @@ export async function getExpenseById(expenseId) {
   return withApiFallback(
     async () => {
       const response = await api.get(`/api/expenses/${expenseId}`)
-      return response.data
+      return normalizeExpense(response.data)
     },
     () => mockGetExpenseById(expenseId),
   )
@@ -329,9 +530,9 @@ export async function saveExpense(payload, user) {
   return withApiFallback(
     async () => {
       const response = payload.id
-        ? await api.put(`/api/expenses/${payload.id}`, payload)
-        : await api.post('/api/expenses', payload)
-      return response.data
+        ? await api.put(`/api/expenses/${payload.id}`, buildExpenseFormData(payload))
+        : await api.post('/api/expenses', buildExpenseFormData(payload))
+      return normalizeExpense(response.data)
     },
     () => mockSaveExpense(payload, user),
   )
@@ -341,21 +542,37 @@ export async function submitExpense(expenseId, actor) {
   return withApiFallback(
     async () => {
       const response = await api.post(`/api/expenses/${expenseId}/submit`)
-      return response.data
+      return normalizeExpense(response.data)
     },
     () => mockSubmitExpense(expenseId, actor),
   )
 }
 
+export async function overrideExpenseStatus(expenseId, decision, comment = '') {
+  const response = await api.post(`/api/expenses/${expenseId}/override`, {
+    decision,
+    comment,
+  })
+  return normalizeExpense(response.data)
+}
+
 export async function getEmployeeDashboard(user) {
-  return mockGetEmployeeDashboard(user)
+  return withApiFallback(
+    () => buildEmployeeDashboard(user),
+    () => mockGetEmployeeDashboard(user),
+  )
 }
 
 export async function getAdminDashboard() {
-  return mockGetAdminDashboard()
+  return withApiFallback(
+    () => buildAdminDashboard(),
+    () => mockGetAdminDashboard(),
+  )
 }
 
 export async function getManagerDashboard(user) {
-  return mockGetManagerDashboard(user)
+  return withApiFallback(
+    () => buildManagerDashboard(user),
+    () => mockGetManagerDashboard(user),
+  )
 }
-

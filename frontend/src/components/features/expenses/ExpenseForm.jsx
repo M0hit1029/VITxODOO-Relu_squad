@@ -33,6 +33,7 @@ function buildSteps(status) {
 export function ExpenseForm({ initialValues, countries, baseCurrency = 'INR', onSave }) {
   const [file, setFile] = useState(null)
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [activeAction, setActiveAction] = useState(null)
   const form = useForm({
     resolver: zodResolver(expenseSchema),
     defaultValues: initialValues,
@@ -67,22 +68,34 @@ export function ExpenseForm({ initialValues, countries, baseCurrency = 'INR', on
   }
 
   const handleDraftSave = form.handleSubmit(async (values) => {
-    await onSave({
-      ...initialValues,
-      ...values,
-      amountInBase: convertedAmount || values.amount,
-      receiptName: file?.name ?? initialValues?.receiptName ?? '',
-    }, false)
+    setActiveAction('draft')
+    try {
+      await onSave({
+        ...initialValues,
+        ...values,
+        amountInBase: convertedAmount || values.amount,
+        receiptFile: file ?? null,
+        receiptUrl: initialValues?.receiptUrl ?? '',
+      }, false)
+    } finally {
+      setActiveAction(null)
+    }
   })
 
   const handleSubmitApproval = form.handleSubmit(async (values) => {
-    await onSave({
-      ...initialValues,
-      ...values,
-      amountInBase: convertedAmount || values.amount,
-      receiptName: file?.name ?? initialValues?.receiptName ?? '',
-    }, true)
-    setConfirmOpen(false)
+    setActiveAction('submit')
+    try {
+      await onSave({
+        ...initialValues,
+        ...values,
+        amountInBase: convertedAmount || values.amount,
+        receiptFile: file ?? null,
+        receiptUrl: initialValues?.receiptUrl ?? '',
+      }, true)
+      setConfirmOpen(false)
+    } finally {
+      setActiveAction(null)
+    }
   })
 
   return (
@@ -170,7 +183,13 @@ export function ExpenseForm({ initialValues, countries, baseCurrency = 'INR', on
             <Input multiline rows={4} {...form.register('remarks')} placeholder="Optional notes for reviewers" />
           </div>
           <div className="flex flex-wrap justify-end gap-3">
-            <Button variant="outline" onClick={handleDraftSave} disabled={form.formState.isSubmitting}>
+            <Button
+              variant="outline"
+              onClick={handleDraftSave}
+              disabled={form.formState.isSubmitting}
+              loading={activeAction === 'draft'}
+              loadingText="Saving draft..."
+            >
               Save as Draft
             </Button>
             <Button onClick={() => setConfirmOpen(true)} disabled={form.formState.isSubmitting}>
@@ -187,10 +206,12 @@ export function ExpenseForm({ initialValues, countries, baseCurrency = 'INR', on
         description="This sends the request into the approval workflow and makes the form read-only."
         footer={
           <>
-            <Button variant="ghost" onClick={() => setConfirmOpen(false)}>
+            <Button variant="ghost" onClick={() => setConfirmOpen(false)} disabled={activeAction === 'submit'}>
               Cancel
             </Button>
-            <Button onClick={handleSubmitApproval}>Confirm submit</Button>
+            <Button onClick={handleSubmitApproval} loading={activeAction === 'submit'} loadingText="Submitting expense...">
+              Confirm submit
+            </Button>
           </>
         }
       >

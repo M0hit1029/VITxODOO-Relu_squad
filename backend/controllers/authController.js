@@ -3,11 +3,18 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const emailService = require('../services/emailService');
+const { getCompanySettings } = require('../services/companySettingsStore');
+const { serializeCompany, serializeUser } = require('../utils/serializers');
 const logger = require('../utils/logger');
 
 const signup = async (req, res) => {
 	try {
-		const { name, email, password, country, base_currency } = req.body;
+		const name = req.body?.name || req.body?.fullName;
+		const email = req.body?.email;
+		const password = req.body?.password;
+		const country = req.body?.country;
+		const base_currency = req.body?.base_currency || req.body?.baseCurrency;
+		const companyName = req.body?.companyName || `${name}'s Company`;
 
 		if (!name || !email || !password || !country || !base_currency) {
 			logger.warn('Signup failed: All fields are required.');
@@ -25,7 +32,7 @@ const signup = async (req, res) => {
 
 		const company = await prisma.company.create({
 			data: {
-				name: `${name}'s Company`,
+				name: companyName,
 				country,
 				base_currency,
 			},
@@ -53,13 +60,8 @@ const signup = async (req, res) => {
 
 		return res.status(201).json({
 			token,
-			user: {
-				id: user.id,
-				name: user.name,
-				email: user.email,
-				role: user.role,
-				companyId: company.id,
-			},
+			user: serializeUser(user),
+			company: serializeCompany(company, getCompanySettings(company.id)),
 		});
 	} catch (error) {
 		logger.error(`Signup failed for ${req.body?.email}: ${error.message}`);
@@ -98,17 +100,8 @@ const login = async (req, res) => {
 
 		return res.status(200).json({
 			token,
-			user: {
-				id: user.id,
-				name: user.name,
-				email: user.email,
-				role: user.role,
-				companyId: user.company_id,
-				company: {
-					base_currency: user.company.base_currency,
-					name: user.company.name,
-				},
-			},
+			user: serializeUser(user),
+			company: serializeCompany(user.company, getCompanySettings(user.company.id)),
 		});
 	} catch (error) {
 		logger.error(`Login failed for ${req.body?.email}: ${error.message}`);
@@ -151,7 +144,8 @@ const forgotPassword = async (req, res) => {
 
 const resetPassword = async (req, res) => {
 	try {
-		const { token, newPassword } = req.body;
+		const token = req.body?.token;
+		const newPassword = req.body?.newPassword || req.body?.password;
 
 		const user = await prisma.user.findFirst({
 			where: {

@@ -4,22 +4,33 @@ import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { ApprovalActionPanel } from '@/components/features/approvals/ApprovalActionPanel'
 import { ExpenseStatusBadge } from '@/components/features/expenses/ExpenseStatusBadge'
+import { Button } from '@/components/ui/Button'
 import { Card, CardContent } from '@/components/ui/Card'
 import { DataTable } from '@/components/ui/DataTable'
 import { Input } from '@/components/ui/Input'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { useApprovals } from '@/hooks/useApprovals'
+import { useAuthStore } from '@/store/authStore'
 
 export default function ApprovalQueue() {
   const navigate = useNavigate()
+  const company = useAuthStore((state) => state.company)
   const { getApprovalQueue, decideApproval } = useApprovals()
   const [queue, setQueue] = useState([])
   const [filters, setFilters] = useState({ status: 'all', search: '' })
   const [pendingAction, setPendingAction] = useState(null)
+  const [isLoadingQueue, setIsLoadingQueue] = useState(true)
 
   const loadQueue = useCallback(async () => {
-    const result = await getApprovalQueue(filters)
-    setQueue(result)
+    setIsLoadingQueue(true)
+    try {
+      const result = await getApprovalQueue(filters)
+      setQueue(result)
+    } catch (error) {
+      toast.error(error.message || 'Unable to load approval queue.')
+    } finally {
+      setIsLoadingQueue(false)
+    }
   }, [filters, getApprovalQueue])
 
   useEffect(() => {
@@ -38,50 +49,56 @@ export default function ApprovalQueue() {
           <p className="money-text text-sm font-semibold text-card-foreground">
             {formatCurrency(row.amount, row.currency)}
           </p>
-          <p className="text-xs text-muted-foreground">≈ {formatCurrency(row.amountInBase, 'INR')}</p>
+          <p className="text-xs text-muted-foreground">
+            ≈ {formatCurrency(row.amountInBase, company?.baseCurrency ?? row.baseCurrency ?? 'INR')}
+          </p>
         </div>
       ),
     },
     { header: 'Status', cell: (row) => <ExpenseStatusBadge status={row.status} /> },
     {
       header: 'Actions',
-      cell: (row) => (
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className="rounded-lg bg-success/12 px-3 py-1.5 text-xs font-medium text-success transition-colors hover:bg-success/20"
-            onClick={(event) => {
-              event.stopPropagation()
-              setPendingAction({ expense: row, decision: 'approved' })
-            }}
-          >
-            Approve
-          </button>
-          <button
-            type="button"
-            className="rounded-lg bg-destructive/12 px-3 py-1.5 text-xs font-medium text-destructive transition-colors hover:bg-destructive/20"
-            onClick={(event) => {
-              event.stopPropagation()
-              setPendingAction({ expense: row, decision: 'rejected' })
-            }}
-          >
-            Reject
-          </button>
-        </div>
-      ),
+      cell: (row) =>
+        row.status === 'pending' ? (
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="bg-success/12 text-success hover:bg-success/20 hover:text-success"
+              onClick={(event) => {
+                event.stopPropagation()
+                setPendingAction({ expense: row, decision: 'approve' })
+              }}
+            >
+              Approve
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="bg-destructive/12 text-destructive hover:bg-destructive/20 hover:text-destructive"
+              onClick={(event) => {
+                event.stopPropagation()
+                setPendingAction({ expense: row, decision: 'reject' })
+              }}
+            >
+              Reject
+            </Button>
+          </div>
+        ) : (
+          <span className="text-xs text-muted-foreground">Completed</span>
+        ),
     },
   ]
 
   const handleDecision = async (comment) => {
     if (!pendingAction) return
-    const approval = pendingAction.expense.approvalChain.find((step) => step.status === 'pending')
     await decideApproval({
       expenseId: pendingAction.expense.id,
-      approvalId: approval.id,
+      approvalId: pendingAction.expense.approvalRequestId,
       decision: pendingAction.decision,
       comment,
     })
-    toast.success(`Expense ${pendingAction.decision}.`)
+    toast.success(`Expense ${pendingAction.decision === 'approve' ? 'approved' : 'rejected'}.`)
     setPendingAction(null)
     loadQueue()
   }
@@ -125,7 +142,12 @@ export default function ApprovalQueue() {
         </CardContent>
       </Card>
 
-      <DataTable columns={columns} data={queue} onRowClick={(row) => navigate(`/approvals/${row.id}`)} />
+      <DataTable
+        columns={columns}
+        data={queue}
+        loading={isLoadingQueue}
+        onRowClick={(row) => navigate(`/approvals/${row.id}`)}
+      />
 
       <ApprovalActionPanel
         open={Boolean(pendingAction)}

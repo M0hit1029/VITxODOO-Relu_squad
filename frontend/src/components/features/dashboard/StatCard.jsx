@@ -4,10 +4,18 @@ import { TrendingDown, TrendingUp } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/Card'
 import { formatCompactNumber, formatCurrency } from '@/lib/utils'
 
-export function StatCard({ label, value, icon, trend, kind = 'currency', color = 'default' }) {
+export function StatCard({
+  label,
+  value,
+  icon,
+  trend,
+  kind = 'currency',
+  color = 'default',
+  currency = 'INR',
+}) {
   const count = useMotionValue(0)
   const display = useTransform(count, (latest) =>
-    kind === 'currency' ? formatCurrency(Math.round(latest), 'INR') : formatCompactNumber(latest),
+    kind === 'currency' ? formatCurrency(Math.round(latest), currency) : formatCompactNumber(latest),
   )
   const iconElement = icon ? createElement(icon, { className: 'h-5 w-5 shrink-0' }) : null
 

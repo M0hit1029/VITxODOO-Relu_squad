@@ -2,6 +2,7 @@ import { api, withApiFallback } from '@/services/api'
 import { createDemoToken, nextId, readDb, updateDb } from '@/services/mockDb'
 import { sleep } from '@/lib/utils'
 import { BASE_COUNTRIES } from '@/lib/constants'
+import { normalizeCompany, normalizeUser } from '@/services/normalizers'
 
 function sanitizeUser(user) {
   const { password, ...safeUser } = user
@@ -19,8 +20,8 @@ async function mockLogin({ email, password }) {
 
   return {
     token: createDemoToken(user),
-    user: sanitizeUser(user),
-    company,
+    user: normalizeUser(sanitizeUser(user)),
+    company: normalizeCompany(company),
   }
 }
 
@@ -63,8 +64,16 @@ async function mockSignup(payload) {
 
   return {
     token: createDemoToken(user),
-    user: sanitizeUser(user),
-    company: session.company,
+    user: normalizeUser(sanitizeUser(user)),
+    company: normalizeCompany(session.company),
+  }
+}
+
+function normalizeSessionPayload(payload) {
+  return {
+    token: payload.token,
+    user: normalizeUser(payload.user),
+    company: normalizeCompany(payload.company ?? payload.user?.company),
   }
 }
 
@@ -72,7 +81,7 @@ export async function login(credentials) {
   return withApiFallback(
     async () => {
       const response = await api.post('/api/auth/login', credentials)
-      return response.data
+      return normalizeSessionPayload(response.data)
     },
     () => mockLogin(credentials),
   )
@@ -81,8 +90,15 @@ export async function login(credentials) {
 export async function signup(payload) {
   return withApiFallback(
     async () => {
-      const response = await api.post('/api/auth/signup', payload)
-      return response.data
+      const countryMatch = BASE_COUNTRIES.find((country) => country.name === payload.country)
+      const response = await api.post('/api/auth/signup', {
+        name: payload.fullName,
+        email: payload.email,
+        password: payload.password,
+        country: payload.country,
+        baseCurrency: countryMatch?.currencyCode ?? 'INR',
+      })
+      return normalizeSessionPayload(response.data)
     },
     () => mockSignup(payload),
   )
@@ -104,7 +120,10 @@ export async function forgotPassword(payload) {
 export async function resetPassword(payload) {
   return withApiFallback(
     async () => {
-      const response = await api.post('/api/auth/reset-password', payload)
+      const response = await api.post('/api/auth/reset-password', {
+        token: payload.token,
+        newPassword: payload.password,
+      })
       return response.data
     },
     async () => {

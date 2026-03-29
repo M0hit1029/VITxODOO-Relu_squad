@@ -8,10 +8,12 @@ import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { formatCurrency } from '@/lib/utils'
 import { getAdminDashboard } from '@/services/expenseService'
+import { useAuthStore } from '@/store/authStore'
 
 const iconMap = [Wallet, LayoutDashboard, ReceiptText, Users]
 
 export default function AdminDashboard() {
+  const company = useAuthStore((state) => state.company)
   const [dashboard, setDashboard] = useState(null)
   const fetchedRef = useRef(false)
 
@@ -42,7 +44,7 @@ export default function AdminDashboard() {
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {dashboard.stats.map((stat, index) => (
-          <StatCard key={stat.label} {...stat} icon={iconMap[index]} />
+          <StatCard key={stat.label} {...stat} icon={iconMap[index]} currency={stat.currency ?? company?.baseCurrency} />
         ))}
       </div>
 
@@ -66,7 +68,7 @@ export default function AdminDashboard() {
                 </div>
                 <div className="shrink-0 text-right">
                   <p className="money-text text-sm font-semibold text-card-foreground">
-                    {formatCurrency(expense.amountInBase, 'INR')}
+                    {formatCurrency(expense.amountInBase, company?.baseCurrency ?? expense.baseCurrency ?? 'INR')}
                   </p>
                   <ExpenseStatusBadge status={expense.status} />
                 </div>

@@ -1,16 +1,19 @@
 import * as Tabs from '@radix-ui/react-tabs'
 import { Save } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
 import { Card, CardContent } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
 import { useAuthStore } from '@/store/authStore'
-import { updateDb } from '@/services/mockDb'
+import { getCompanySettings, updateCompanySettings } from '@/services/companyService'
 
 export default function CompanySettings() {
   const company = useAuthStore((state) => state.company)
+  const setCompany = useAuthStore((state) => state.setCompany)
   const [name, setName] = useState(company?.name ?? '')
+  const [isSaving, setIsSaving] = useState(false)
+  const [isLoadingSettings, setIsLoadingSettings] = useState(true)
   const [notifications, setNotifications] = useState({
     submission: true,
     approval: true,
@@ -19,13 +22,40 @@ export default function CompanySettings() {
   const [minLength, setMinLength] = useState(8)
   const [requireMfa, setRequireMfa] = useState(false)
 
-  const saveSettings = () => {
-    updateDb((db) => {
-      db.company.name = name
-      db.company.notifications = notifications
-      db.company.security = { minLength, requireMfa }
-    })
-    toast.success('Settings saved.')
+  useEffect(() => {
+    setIsLoadingSettings(true)
+    getCompanySettings()
+      .then((settings) => {
+        setCompany(settings)
+        setName(settings.name)
+        setNotifications(settings.notifications)
+        setMinLength(settings.security.minLength)
+        setRequireMfa(settings.security.requireMfa)
+      })
+      .catch(() => {
+        setName(company?.name ?? '')
+      })
+      .finally(() => {
+        setIsLoadingSettings(false)
+      })
+  }, [company?.name, setCompany])
+
+  const saveSettings = async () => {
+    setIsSaving(true)
+    try {
+      const updated = await updateCompanySettings({
+        name,
+        notifications,
+        security: {
+          minLength,
+          requireMfa,
+        },
+      })
+      setCompany(updated)
+      toast.success('Settings saved.')
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   return (
@@ -36,7 +66,7 @@ export default function CompanySettings() {
           <h1 className="text-2xl text-foreground">Company Settings</h1>
           <p className="mt-1 text-sm text-muted-foreground">Manage your workspace configuration</p>
         </div>
-        <Button onClick={saveSettings}>
+        <Button onClick={saveSettings} loading={isSaving} loadingText="Saving changes..." disabled={isLoadingSettings}>
           <Save className="mr-1.5 h-4 w-4" />
           Save Changes
         </Button>
@@ -60,7 +90,12 @@ export default function CompanySettings() {
             <CardContent className="space-y-5 p-6">
               <div className="space-y-2">
                 <label className="text-sm font-medium text-foreground">Company Name</label>
-                <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="Company name" />
+                <Input
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder="Company name"
+                  disabled={isLoadingSettings || isSaving}
+                />
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
@@ -88,6 +123,7 @@ export default function CompanySettings() {
                   <input
                     type="checkbox"
                     checked={value}
+                    disabled={isLoadingSettings || isSaving}
                     onChange={(event) => setNotifications((current) => ({ ...current, [key]: event.target.checked }))}
                     className="h-4 w-4 rounded border-border accent-primary"
                   />
@@ -105,6 +141,7 @@ export default function CompanySettings() {
                 <Input
                   type="number"
                   value={minLength}
+                  disabled={isLoadingSettings || isSaving}
                   onChange={(event) => setMinLength(Number(event.target.value))}
                   placeholder="Minimum password length"
                   className="max-w-[200px]"
@@ -115,6 +152,7 @@ export default function CompanySettings() {
                 <input
                   type="checkbox"
                   checked={requireMfa}
+                  disabled={isLoadingSettings || isSaving}
                   onChange={(event) => setRequireMfa(event.target.checked)}
                   className="h-4 w-4 rounded border-border accent-primary"
                 />

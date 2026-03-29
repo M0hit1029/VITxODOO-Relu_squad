@@ -1,13 +1,13 @@
 const prisma = require('../dbs/db');
 const approvalEngine = require('../services/approvalEngine');
+const { serializeApprovalQueueItem } = require('../utils/serializers');
 const logger = require('../utils/logger');
 
 const getPendingApprovals = async (req, res) => {
 	try {
-		const pending = await prisma.approvalRequest.findMany({
+		const approvals = await prisma.approvalRequest.findMany({
 			where: {
 				approver_id: req.user.id,
-				status: 'pending',
 				expense: {
 					company_id: req.user.company_id,
 				},
@@ -30,11 +30,11 @@ const getPendingApprovals = async (req, res) => {
 				approver: true,
 			},
 			orderBy: {
-				created_at: 'asc',
+				created_at: 'desc',
 			},
 		});
 
-		return res.status(200).json(pending);
+		return res.status(200).json(approvals.map(serializeApprovalQueueItem));
 	} catch (error) {
 		logger.error(`Failed to fetch pending approvals for user ${req.user.id}: ${error.message}`);
 		return res.status(500).json({ message: 'Failed to fetch pending approvals.' });

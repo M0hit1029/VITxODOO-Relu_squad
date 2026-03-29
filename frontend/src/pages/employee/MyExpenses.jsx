@@ -13,11 +13,13 @@ import { ExpenseStatusBadge } from '@/components/features/expenses/ExpenseStatus
 import { CATEGORIES } from '@/lib/constants'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { useExpenses } from '@/hooks/useExpenses'
+import { useAuthStore } from '@/store/authStore'
 
 const statuses = ['all', 'draft', 'submitted', 'approved', 'rejected']
 
 export default function MyExpenses() {
   const navigate = useNavigate()
+  const company = useAuthStore((state) => state.company)
   const {
     expenses,
     filters,
@@ -63,7 +65,9 @@ export default function MyExpenses() {
           <p className="money-text text-sm font-semibold text-card-foreground">
             {formatCurrency(row.amount, row.currency)}
           </p>
-          <p className="text-xs text-muted-foreground">≈ {formatCurrency(row.amountInBase, 'INR')}</p>
+          <p className="text-xs text-muted-foreground">
+            ≈ {formatCurrency(row.amountInBase, company?.baseCurrency ?? row.baseCurrency ?? 'INR')}
+          </p>
         </div>
       ),
     },

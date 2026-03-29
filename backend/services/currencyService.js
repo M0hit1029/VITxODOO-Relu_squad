@@ -2,24 +2,25 @@ const logger = require('../utils/logger');
 
 const getCountriesAndCurrencies = async () => {
 	try {
-		const response = await fetch('https://restcountries.com/v3.1/all?fields=name,currencies');
+		const response = await fetch('https://restcountries.com/v3.1/all?fields=name,currencies,flag,cca2');
 		const data = await response.json();
 
-	return data
-		.filter((item) => item && item.name && item.name.common && item.currencies)
-		.flatMap((item) => {
-			const currencyCodes = Object.keys(item.currencies || {});
-			if (currencyCodes.length === 0) {
-				return [];
-			}
+		return data
+			.filter((item) => item && item.name && item.name.common && item.currencies)
+			.map((item) => {
+				const currencyCode = Object.keys(item.currencies || {})[0];
 
-			return currencyCodes.map((code) => ({
-				label: `${item.name.common} (${code})`,
-				country: item.name.common,
-				currency: code,
-			}));
-		})
-		.sort((a, b) => a.label.localeCompare(b.label));
+				return currencyCode
+					? {
+							name: item.name.common,
+							currencyCode,
+							flag: item.flag || '',
+							cca2: item.cca2 || '',
+					  }
+					: null;
+			})
+			.filter(Boolean)
+			.sort((a, b) => a.name.localeCompare(b.name));
 	} catch (error) {
 		logger.error(`Failed to fetch countries details from external API: ${error.message}`);
 		throw error;

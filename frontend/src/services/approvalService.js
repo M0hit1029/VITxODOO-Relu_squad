@@ -1,6 +1,7 @@
 import { api, withApiFallback } from '@/services/api'
 import { nextId, readDb, updateDb } from '@/services/mockDb'
 import { sleep } from '@/lib/utils'
+import { normalizeQueueItem, normalizeRule } from '@/services/normalizers'
 
 function isActionable(expense, approverId) {
   const index = expense.approvalChain?.findIndex(
@@ -41,13 +42,14 @@ async function mockQueue(user, filters = {}) {
 
 async function mockDecision({ expenseId, approvalId, decision, comment, actor }) {
   await sleep(650)
+  const resolvedDecision = decision === 'approve' ? 'approved' : decision === 'reject' ? 'rejected' : decision
   const updated = updateDb((db) => {
     const expense = db.expenses.find((entry) => entry.id === expenseId)
     if (!expense) return
     const approval = expense.approvalChain.find((entry) => entry.id === approvalId)
     if (!approval) return
 
-    approval.status = decision
+    approval.status = resolvedDecision
     approval.comment = comment
     approval.decidedAt = new Date().toISOString()
 
@@ -55,12 +57,12 @@ async function mockDecision({ expenseId, approvalId, decision, comment, actor })
       id: nextId('log'),
       actorId: actor.id,
       actorName: actor.name,
-      action: decision,
+      action: resolvedDecision,
       timestamp: new Date().toISOString(),
       note: comment,
     })
 
-    if (decision === 'rejected') {
+    if (resolvedDecision === 'rejected') {
       expense.status = 'rejected'
       expense.updatedAt = new Date().toISOString()
       return
@@ -107,11 +109,39 @@ async function mockDeleteRule(ruleId) {
   return { success: true }
 }
 
+function filterQueue(queue, filters = {}) {
+  return queue.filter((item) => {
+    if (filters.status && filters.status !== 'all' && item.status !== filters.status) return false
+    if (filters.search) {
+      const haystack = `${item.description} ${item.employeeName}`.toLowerCase()
+      if (!haystack.includes(filters.search.toLowerCase())) return false
+    }
+    return true
+  })
+}
+
+function toRulePayload(payload) {
+  return {
+    name: payload.name,
+    description: payload.description,
+    employeeId: payload.employeeId,
+    managerId: payload.managerId || null,
+    isManagerRequired: payload.isManagerRequired,
+    mode: payload.mode,
+    minApprovalPercentage: payload.minApprovalPercentage,
+    approvers: payload.approvers.map((approver, index) => ({
+      userId: approver.userId,
+      sequenceOrder: approver.sequenceOrder ?? index + 1,
+      isRequired: approver.isRequired,
+    })),
+  }
+}
+
 export async function getApprovalQueue(user, filters) {
   return withApiFallback(
     async () => {
-      const response = await api.get('/api/approvals/pending', { params: filters })
-      return response.data
+      const response = await api.get('/api/approvals/pending')
+      return filterQueue(response.data.map(normalizeQueueItem), filters)
     },
     () => mockQueue(user, filters),
   )
@@ -133,7 +163,7 @@ export async function getApprovalRules() {
   return withApiFallback(
     async () => {
       const response = await api.get('/api/rules')
-      return response.data
+      return response.data.map(normalizeRule)
     },
     () => mockRules(),
   )
@@ -143,9 +173,9 @@ export async function saveApprovalRule(payload) {
   return withApiFallback(
     async () => {
       const response = payload.id
-        ? await api.put(`/api/rules/${payload.id}`, payload)
-        : await api.post('/api/rules', payload)
-      return response.data
+        ? await api.put(`/api/rules/${payload.id}`, toRulePayload(payload))
+        : await api.post('/api/rules', toRulePayload(payload))
+      return normalizeRule(response.data)
     },
     () => mockSaveRule(payload),
   )

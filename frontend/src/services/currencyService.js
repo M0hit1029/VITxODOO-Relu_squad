@@ -1,3 +1,4 @@
+import { api, shouldUseMockApi } from '@/services/api'
 import { BASE_COUNTRIES } from '@/lib/constants'
 
 let countriesCache = null
@@ -12,31 +13,19 @@ const fallbackRates = {
   JPY: { JPY: 1, INR: 0.56, USD: 0.0068, GBP: 0.0053, AED: 0.025, SGD: 0.0091, EUR: 0.0062 },
 }
 
-function normalizeCountry(payload) {
-  if (!payload?.currencies) return null
-  const currencyCode = Object.keys(payload.currencies)[0]
-  return {
-    name: payload.name.common,
-    currencyCode,
-    flag: payload.flag ?? '',
-    cca2: payload.cca2,
-  }
-}
-
 export async function getCountries() {
   if (countriesCache) return countriesCache
 
   try {
-    const response = await fetch(
-      'https://restcountries.com/v3.1/all?fields=name,currencies,flag,cca2',
-    )
-    const countries = await response.json()
-    countriesCache = countries
-      .map(normalizeCountry)
-      .filter(Boolean)
-      .sort((left, right) => left.name.localeCompare(right.name))
+    const response = await api.get('/api/currency/countries')
+    countriesCache = response.data
     return countriesCache
   } catch {
+    if (shouldUseMockApi) {
+      countriesCache = BASE_COUNTRIES
+      return countriesCache
+    }
+
     countriesCache = BASE_COUNTRIES
     return countriesCache
   }
@@ -47,11 +36,16 @@ export async function convertCurrency(from, to, amount) {
   if (from === to) return Number(amount)
 
   try {
-    const response = await fetch(`https://api.exchangerate-api.com/v4/latest/${from}`)
-    const data = await response.json()
-    return Number(amount) * Number(data.rates[to])
-  } catch {
-    const rate = fallbackRates[from]?.[to]
-    return rate ? Number(amount) * rate : Number(amount)
+    const response = await api.get('/api/currency/convert', {
+      params: { from, to, amount },
+    })
+    return Number(response.data.converted ?? 0)
+  } catch (error) {
+    if (!shouldUseMockApi) {
+      const rate = fallbackRates[from]?.[to]
+      if (rate) return Number(amount) * rate
+    }
+
+    throw error
   }
 }
