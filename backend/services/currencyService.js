@@ -1,6 +1,9 @@
+const logger = require('../utils/logger');
+
 const getCountriesAndCurrencies = async () => {
-	const response = await fetch('https://restcountries.com/v3.1/all?fields=name,currencies');
-	const data = await response.json();
+	try {
+		const response = await fetch('https://restcountries.com/v3.1/all?fields=name,currencies');
+		const data = await response.json();
 
 	return data
 		.filter((item) => item && item.name && item.name.common && item.currencies)
@@ -17,6 +20,10 @@ const getCountriesAndCurrencies = async () => {
 			}));
 		})
 		.sort((a, b) => a.label.localeCompare(b.label));
+	} catch (error) {
+		logger.error(`Failed to fetch countries details from external API: ${error.message}`);
+		throw error;
+	}
 };
 
 const convertCurrency = async (amount, fromCurrency, toCurrency) => {
@@ -32,11 +39,14 @@ const convertCurrency = async (amount, fromCurrency, toCurrency) => {
 		const rate = data.rates?.[toCurrency];
 
 		if (!rate) {
+			logger.warn(`Currency conversion missing rate for ${fromCurrency} -> ${toCurrency}`);
 			throw new Error('CONVERSION_FAILED');
 		}
 
+		logger.info(`Currency converted ${fromCurrency} -> ${toCurrency} successfully`);
 		return parseFloat((numericAmount * rate).toFixed(2));
 	} catch (error) {
+		logger.error(`Exception during currency conversion from ${fromCurrency}: ${error.message}`);
 		throw new Error('CONVERSION_FAILED');
 	}
 };

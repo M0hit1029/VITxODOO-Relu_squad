@@ -1,6 +1,7 @@
 const prisma = require('../dbs/db');
 const currencyService = require('../services/currencyService');
 const upload = require('../src/config/upload');
+const logger = require('../utils/logger');
 
 const allowedCategories = [
 	'Food',
@@ -76,6 +77,7 @@ const getExpenses = async (req, res) => {
 
 		return res.status(200).json(expenses);
 	} catch (error) {
+		logger.error(`Failed to fetch expenses for company ${req.user.company_id}: ${error.message}`);
 		return res.status(500).json({ message: 'Failed to fetch expenses.' });
 	}
 };
@@ -121,11 +123,13 @@ const getExpense = async (req, res) => {
 		}
 
 		if (!canAccessExpense(req.user, expense)) {
+			logger.warn(`Expense ${req.params.id} access forbidden for user ${req.user.id}`);
 			return res.status(403).json({ message: 'Forbidden' });
 		}
 
 		return res.status(200).json(expense);
 	} catch (error) {
+		logger.error(`Failed to fetch expense ${req.params.id}: ${error.message}`);
 		return res.status(500).json({ message: 'Failed to fetch expense.' });
 	}
 };
@@ -143,15 +147,18 @@ const createExpense = async (req, res) => {
 		} = req.body;
 
 		if (!description || !category || !expense_date || !amount || !currency || !paid_by) {
+			logger.warn(`Expense creation failed: Missing fields from user ${req.user.id}`);
 			return res.status(400).json({ message: 'Required fields are missing.' });
 		}
 
 		if (!allowedCategories.includes(category)) {
+			logger.warn(`Expense creation failed: Invalid category '${category}' from user ${req.user.id}`);
 			return res.status(400).json({ message: 'Invalid category.' });
 		}
 
 		const numericAmount = parseFloat(amount);
 		if (Number.isNaN(numericAmount)) {
+			logger.warn(`Expense creation failed: Invalid amount '${amount}' from user ${req.user.id}`);
 			return res.status(400).json({ message: 'Invalid amount.' });
 		}
 
@@ -182,8 +189,10 @@ const createExpense = async (req, res) => {
 			},
 		});
 
+		logger.info(`Expense ${expense.id} created successfully by user ${req.user.id}.`);
 		return res.status(201).json(expense);
 	} catch (error) {
+		logger.error(`Failed to create expense for user ${req.user?.id}: ${error.message}`);
 		return res.status(500).json({ message: 'Failed to create expense.' });
 	}
 };
@@ -204,6 +213,7 @@ const updateExpense = async (req, res) => {
 		const isOwnerDraft = expense.employee_id === req.user.id && expense.status === 'draft';
 
 		if (!isAdmin && !isOwnerDraft) {
+			logger.warn(`Update expense failed: Forbidden for user ${req.user.id} on expense ${req.params.id}`);
 			return res.status(403).json({ message: 'Forbidden' });
 		}
 
@@ -263,8 +273,10 @@ const updateExpense = async (req, res) => {
 			data,
 		});
 
+		logger.info(`Expense ${req.params.id} updated successfully by user ${req.user.id}.`);
 		return res.status(200).json(updatedExpense);
 	} catch (error) {
+		logger.error(`Failed to update expense ${req.params.id} by user ${req.user?.id}: ${error.message}`);
 		return res.status(500).json({ message: 'Failed to update expense.' });
 	}
 };
@@ -289,6 +301,7 @@ const submitExpense = async (req, res) => {
 		}
 
 		if (expense.employee_id !== req.user.id || expense.status !== 'draft') {
+			logger.warn(`Submit expense failed: User ${req.user.id} cannot submit expense ${req.params.id}`);
 			return res.status(403).json({ message: 'Only owner can submit draft expense.' });
 		}
 
@@ -305,6 +318,7 @@ const submitExpense = async (req, res) => {
 			if (error.message === 'CONVERSION_FAILED') {
 				converted = null;
 				logNote = 'Currency conversion failed. Amount stored in original currency.';
+				logger.warn(`Currency conversion failed when submitting expense ${expense.id}: ${error.message}`);
 			} else {
 				throw error;
 			}
@@ -332,8 +346,10 @@ const submitExpense = async (req, res) => {
 		const { triggerApprovalFlow } = require('../services/approvalEngine');
 		await triggerApprovalFlow(expense.id);
 
+		logger.info(`Expense ${expense.id} submitted for approval by user ${req.user.id}.`);
 		return res.status(200).json(updatedExpense);
 	} catch (error) {
+		logger.error(`Failed to submit expense ${req.params.id} by user ${req.user?.id}: ${error.message}`);
 		return res.status(500).json({ message: 'Failed to submit expense.' });
 	}
 };
@@ -379,15 +395,18 @@ const getLogs = async (req, res) => {
 
 		return res.status(200).json(logs);
 	} catch (error) {
+		logger.error(`Failed to fetch logs for expense ${req.params.id}: ${error.message}`);
 		return res.status(500).json({ message: 'Failed to fetch logs.' });
 	}
 };
 
 const uploadReceipt = async (req, res) => {
 	if (!req.file) {
+		logger.warn(`Upload receipt failed: No file uploaded by user ${req.user?.id}`);
 		return res.status(400).json({ message: 'No file uploaded.' });
 	}
 
+	logger.info(`Receipt uploaded: ${req.file.filename}`);
 	return res.status(200).json({
 		receipt_url: `/uploads/${req.file.filename}`,
 	});

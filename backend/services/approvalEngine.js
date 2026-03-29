@@ -1,4 +1,5 @@
 const prisma = require('../dbs/db');
+const logger = require('../utils/logger');
 
 const createApprovalRequest = async (expenseId, ruleId, approver) => {
 	return prisma.approvalRequest.create({
@@ -36,6 +37,7 @@ const updateExpenseStatus = async (expenseId, status, companyId, fallbackActorId
 	const actorId = await getSystemActorId(companyId, fallbackActorId);
 
 	if (actorId) {
+		logger.info(`Auto-resolving expense ${expenseId} status to ${status} by system actor ${actorId}`);
 		await prisma.expenseLog.create({
 			data: {
 				expense_id: expenseId,
@@ -119,6 +121,7 @@ const triggerApprovalFlow = async (expenseId) => {
 	});
 
 	if (!rule) {
+		logger.info(`Approval engine: No rule found for employee ${expense.employee_id}, falling back to draft for expense ${expense.id}`);
 		await prisma.expense.update({
 			where: { id: expense.id },
 			data: { status: 'draft' },
@@ -160,6 +163,7 @@ const triggerApprovalFlow = async (expenseId) => {
 		const actorId = await getSystemActorId(expense.company_id, expense.employee_id);
 
 		if (actorId) {
+			logger.info(`Approval engine: Auto-approved expense ${expense.id} since no approvers were left in the queue.`);
 			await prisma.expenseLog.create({
 				data: {
 					expense_id: expense.id,
@@ -174,10 +178,12 @@ const triggerApprovalFlow = async (expenseId) => {
 	}
 
 	if (rule.approvers_sequence) {
+		logger.info(`Approval engine: Sequential approval active. Creating request for first approver in queue for expense ${expense.id}`);
 		await createApprovalRequest(expense.id, rule.id, approverQueue[0]);
 		return;
 	}
 
+	logger.info(`Approval engine: Parallel approval active. Creating all parallel requests for expense ${expense.id}`);
 	await Promise.all(
 		approverQueue.map((approver) => createApprovalRequest(expense.id, rule.id, approver))
 	);
@@ -283,11 +289,13 @@ const evaluateExpenseStatus = async (expenseId, ruleId) => {
 	const allDecided = pendingRequests.length === 0;
 
 	if (allRequiredApproved && percentageMet) {
+		logger.info(`Approval engine: Expense ${expenseId} completely approved.`);
 		await updateExpenseStatus(expenseId, 'approved', expense.company_id, expense.employee_id);
 		return;
 	}
 
 	if (allDecided && (!allRequiredApproved || !percentageMet)) {
+		logger.info(`Approval engine: Expense ${expenseId} got rejected as minimum approvals/requirements were not met.`);
 		await updateExpenseStatus(expenseId, 'rejected', expense.company_id, expense.employee_id);
 	}
 };

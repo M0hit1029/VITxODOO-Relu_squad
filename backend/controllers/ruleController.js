@@ -1,4 +1,5 @@
 const prisma = require('../dbs/db');
+const logger = require('../utils/logger');
 
 const getRules = async (req, res) => {
 	try {
@@ -38,6 +39,7 @@ const getRules = async (req, res) => {
 
 		return res.status(200).json(rules);
 	} catch (error) {
+		logger.error(`Failed to fetch rules for company ${req.user?.company_id}: ${error.message}`);
 		return res.status(500).json({ message: 'Failed to fetch rules.' });
 	}
 };
@@ -91,17 +93,20 @@ const createRule = async (req, res) => {
 		} = req.body;
 
 		if (!user_id || !description) {
+			logger.warn(`Rule creation failed: Missing user_id or description from admin ${req.user.id}`);
 			return res.status(400).json({ message: 'user_id and description are required.' });
 		}
 
 		const targetUser = await validateCompanyUser(user_id, req.user.company_id);
 		if (!targetUser) {
+			logger.warn(`Rule creation failed: Invalid user_id ${user_id} for company ${req.user.company_id}`);
 			return res.status(400).json({ message: 'Invalid user_id for this company.' });
 		}
 
 		if (typeof manager_id !== 'undefined' && manager_id !== null) {
 			const manager = await validateCompanyUser(manager_id, req.user.company_id);
 			if (!manager) {
+				logger.warn(`Rule creation failed: Invalid manager_id ${manager_id} for company ${req.user.company_id}`);
 				return res.status(400).json({ message: 'Invalid manager_id for this company.' });
 			}
 		}
@@ -109,6 +114,7 @@ const createRule = async (req, res) => {
 		if (Array.isArray(approvers) && approvers.length > 0) {
 			const validApprovers = await validateApprovers(approvers, req.user.company_id);
 			if (!validApprovers) {
+				logger.warn(`Rule creation failed: Invalid approvers listed by admin ${req.user.id}`);
 				return res.status(400).json({ message: 'One or more approvers are invalid for this company.' });
 			}
 		}
@@ -168,8 +174,10 @@ const createRule = async (req, res) => {
 			},
 		});
 
+		logger.info(`Rule ${fullRule.id} created successfully by admin ${req.user.id}.`);
 		return res.status(201).json(fullRule);
 	} catch (error) {
+		logger.error(`Failed to create rule by admin ${req.user?.id}: ${error.message}`);
 		return res.status(500).json({ message: 'Failed to create rule.' });
 	}
 };
@@ -184,6 +192,7 @@ const updateRule = async (req, res) => {
 		});
 
 		if (!existingRule) {
+			logger.warn(`Rule update failed: Rule ${req.params.id} not found for company ${req.user.company_id}`);
 			return res.status(404).json({ message: 'Rule not found.' });
 		}
 
@@ -200,6 +209,7 @@ const updateRule = async (req, res) => {
 		if (typeof user_id !== 'undefined') {
 			const targetUser = await validateCompanyUser(user_id, req.user.company_id);
 			if (!targetUser) {
+				logger.warn(`Rule update failed: Invalid user_id ${user_id} for company ${req.user.company_id}`);
 				return res.status(400).json({ message: 'Invalid user_id for this company.' });
 			}
 		}
@@ -207,6 +217,7 @@ const updateRule = async (req, res) => {
 		if (typeof manager_id !== 'undefined' && manager_id !== null) {
 			const manager = await validateCompanyUser(manager_id, req.user.company_id);
 			if (!manager) {
+				logger.warn(`Rule update failed: Invalid manager_id ${manager_id} for company ${req.user.company_id}`);
 				return res.status(400).json({ message: 'Invalid manager_id for this company.' });
 			}
 		}
@@ -214,6 +225,7 @@ const updateRule = async (req, res) => {
 		if (Array.isArray(approvers) && approvers.length > 0) {
 			const validApprovers = await validateApprovers(approvers, req.user.company_id);
 			if (!validApprovers) {
+				logger.warn(`Rule update failed: Invalid approvers for rule ${req.params.id}`);
 				return res.status(400).json({ message: 'One or more approvers are invalid for this company.' });
 			}
 		}
@@ -296,8 +308,10 @@ const updateRule = async (req, res) => {
 			},
 		});
 
+		logger.info(`Rule ${req.params.id} updated successfully by admin ${req.user.id}.`);
 		return res.status(200).json(updatedRule);
 	} catch (error) {
+		logger.error(`Failed to update rule ${req.params.id} by admin ${req.user?.id}: ${error.message}`);
 		return res.status(500).json({ message: 'Failed to update rule.' });
 	}
 };
@@ -315,6 +329,7 @@ const deleteRule = async (req, res) => {
 		});
 
 		if (!existingRule) {
+			logger.warn(`Rule deletion failed: Rule ${req.params.id} not found for company ${req.user.company_id}`);
 			return res.status(404).json({ message: 'Rule not found.' });
 		}
 
@@ -330,8 +345,10 @@ const deleteRule = async (req, res) => {
 			},
 		});
 
+		logger.info(`Rule ${req.params.id} deleted successfully by admin ${req.user.id}.`);
 		return res.status(200).json({ message: 'Rule deleted successfully.' });
 	} catch (error) {
+		logger.error(`Failed to delete rule ${req.params.id} by admin ${req.user?.id}: ${error.message}`);
 		return res.status(500).json({ message: 'Failed to delete rule.' });
 	}
 };

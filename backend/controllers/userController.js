@@ -2,6 +2,7 @@ const prisma = require('../dbs/db');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const emailService = require('../services/emailService');
+const logger = require('../utils/logger');
 
 const getUsers = async (req, res) => {
 	try {
@@ -30,6 +31,7 @@ const getUsers = async (req, res) => {
 
 		return res.status(200).json(users);
 	} catch (error) {
+		logger.error(`Failed to fetch users for company ${req.user.company_id}: ${error.message}`);
 		return res.status(500).json({ message: 'Failed to fetch users.' });
 	}
 };
@@ -39,10 +41,12 @@ const createUser = async (req, res) => {
 		const { name, email, role, manager_id } = req.body;
 
 		if (!name || !email || !role) {
+			logger.warn(`User creation failed: Missing required fields by ${req.user.email}`);
 			return res.status(400).json({ message: 'Name, email and role are required.' });
 		}
 
 		if (role !== 'manager' && role !== 'employee') {
+			logger.warn(`User creation failed: Invalid role ${role} by ${req.user.email}`);
 			return res.status(400).json({ message: 'Role must be manager or employee.' });
 		}
 
@@ -51,6 +55,7 @@ const createUser = async (req, res) => {
 		});
 
 		if (existingUser) {
+			logger.warn(`User creation failed: Email ${email} already in use. Checked by ${req.user.email}`);
 			return res.status(409).json({ message: 'User already exists.' });
 		}
 
@@ -63,6 +68,7 @@ const createUser = async (req, res) => {
 			});
 
 			if (!manager) {
+				logger.warn(`User creation failed: Invalid manager_id ${manager_id} provided by ${req.user.email}`);
 				return res.status(400).json({ message: 'Invalid manager_id for this company.' });
 			}
 		}
@@ -92,8 +98,10 @@ const createUser = async (req, res) => {
 
 		await emailService.sendPasswordEmail(email, rawPassword);
 
+		logger.info(`User ${email} created successfully by admin ${req.user.email}.`);
 		return res.status(201).json(user);
 	} catch (error) {
+		logger.error(`User creation failed by admin ${req.user?.email}: ${error.message}`);
 		return res.status(500).json({ message: 'Failed to create user.' });
 	}
 };
@@ -111,6 +119,7 @@ const updateUser = async (req, res) => {
 		});
 
 		if (!existingUser) {
+			logger.warn(`User update failed: User ${id} not found by ${req.user.email}`);
 			return res.status(404).json({ message: 'User not found.' });
 		}
 
@@ -127,6 +136,7 @@ const updateUser = async (req, res) => {
 			});
 
 			if (!manager) {
+				logger.warn(`User update failed: Invalid manager_id ${manager_id} provided by ${req.user.email}`);
 				return res.status(400).json({ message: 'Invalid manager_id for this company.' });
 			}
 		}
@@ -159,8 +169,10 @@ const updateUser = async (req, res) => {
 			},
 		});
 
+		logger.info(`User ${id} updated successfully by admin ${req.user.email}.`);
 		return res.status(200).json(updatedUser);
 	} catch (error) {
+		logger.error(`User update failed by admin ${req.user?.email}: ${error.message}`);
 		return res.status(500).json({ message: 'Failed to update user.' });
 	}
 };
@@ -170,6 +182,7 @@ const deleteUser = async (req, res) => {
 		const { id } = req.params;
 
 		if (id === req.user.id) {
+			logger.warn(`User deletion failed: Admin ${req.user.email} attempted to delete themselves.`);
 			return res.status(400).json({ message: 'Admin cannot delete themselves.' });
 		}
 
@@ -192,6 +205,7 @@ const deleteUser = async (req, res) => {
 		});
 
 		if (pendingApprovals > 0) {
+			logger.warn(`User deletion failed: User ${id} has pending approvals. Attempted by ${req.user.email}`);
 			return res.status(400).json({
 				message: 'Cannot delete user with pending approval requests. Reassign first.',
 			});
@@ -201,8 +215,10 @@ const deleteUser = async (req, res) => {
 			where: { id },
 		});
 
+		logger.info(`User ${id} deleted successfully by admin ${req.user.email}.`);
 		return res.status(200).json({ message: 'User deleted successfully.' });
 	} catch (error) {
+		logger.error(`User deletion failed by admin ${req.user?.email}: ${error.message}`);
 		return res.status(500).json({ message: 'Failed to delete user.' });
 	}
 };
@@ -234,8 +250,10 @@ const sendPassword = async (req, res) => {
 
 		await emailService.sendPasswordEmail(user.email, rawPassword);
 
+		logger.info(`New password pushed to user ${user.email} by admin ${req.user.email}.`);
 		return res.status(200).json({ message: 'Password sent successfully.' });
 	} catch (error) {
+		logger.error(`Failed to send password to user ${req.params?.id} by admin ${req.user?.email}: ${error.message}`);
 		return res.status(500).json({ message: 'Failed to send password.' });
 	}
 };
