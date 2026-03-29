@@ -1,9 +1,17 @@
+version: '3.9'
 services:
   postgres:
-    image: postgres
-    container_name: my-postgres-db
+    image: postgres:16-alpine
+    container_name: reimbursement_db
+    restart: unless-stopped
     environment:
-      POSTGRES_PASSWORD: mysecretpass
-      POSTGRES_DB: postgres
+      POSTGRES_USER: reimb_user
+      POSTGRES_PASSWORD: reimb_pass
+      POSTGRES_DB: reimb_db
     ports:
       - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
