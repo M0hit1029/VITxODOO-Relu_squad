@@ -5,7 +5,87 @@ Welcome to the Reimbursement Management System! This project is a full-stack app
 It is designed to solve the struggles of manual, time-consuming, and error-prone expense processes by offering a fully automated and transparent way to define custom approval flows, tackle multi-level hierarchies, and manage complex conditional thresholds.
 
 ---
+## 🚀 Tech Stack
 
+This project is built using a modern, scalable, and production-ready technology stack:
+
+---
+
+### 🖥️ Frontend
+- **React.js (with Vite)** – Lightning-fast UI development and hot module replacement  
+- **JavaScript (ES6+)** – Core scripting language  
+- **Axios** – API communication with backend services  
+- **React Context API** – State management for authentication, company, and expenses  
+- **CSS / Tailwind (optional)** – Responsive and clean UI styling  
+
+---
+
+### ⚙️ Backend
+- **Node.js** – Runtime environment for scalable server-side logic  
+- **Express.js** – REST API framework for handling routes and middleware  
+- **Prisma ORM** – Type-safe database access and schema management  
+- **JWT (JSON Web Tokens)** – Secure authentication and authorization  
+- **Bcrypt.js** – Password hashing for security  
+- **Nodemailer** – Email services (password reset, notifications)  
+- **Winston Logger** – Logging system for debugging and monitoring  
+
+---
+
+### 🗄️ Database
+- **PostgreSQL** – Relational database for structured and reliable data storage  
+- **Docker** – Containerized database setup for consistent local development  
+
+---
+
+### 🤖 AI & OCR Integration
+- **Tesseract.js** – Client-side OCR for receipt scanning (free option)   
+- **Custom Parsing Logic (Regex + AI)** – Extract structured fields like amount, date, vendor  
+
+---
+
+### 🌍 External APIs
+- **REST Countries API** – Fetch country and currency mappings  
+- **ExchangeRate API** – Real-time currency conversion  
+
+---
+
+### 🔐 Authentication & Security
+- **JWT-based Authentication** – Secure session handling  
+- **Role-Based Access Control (RBAC)** – Admin, Manager, Employee roles  
+- **Middleware Guards** – Protected routes and permission checks  
+
+---
+
+### 🧠 Core Backend Services
+- **Approval Engine Service** – Handles sequential, parallel, and hybrid workflows  
+- **Currency Service** – Converts and normalizes multi-currency expenses  
+- **OCR Service** – Processes and extracts receipt data  
+- **Email Service** – Sends notifications and credentials  
+
+---
+
+### 🛠️ Dev Tools & Workflow
+- **Nodemon** – Auto-restart server during development  
+- **Prisma CLI** – Database schema sync and client generation  
+- **Docker Compose** – Easy multi-service setup  
+- **Git & GitHub** – Version control  
+
+---
+
+### 🧪 Testing (Recommended)
+- **Postman / Thunder Client** – API testing  
+- **Jest (optional)** – Unit testing for backend logic  
+- **React Testing Library (optional)** – Frontend component testing  
+
+---
+
+### 🏗️ Architecture Style
+- **Modular Monolith (Service-based architecture)**  
+- Clear separation of concerns:
+  - Controllers (routing)
+  - Services (business logic)
+  - Database (Prisma ORM)
+  - Middleware (authentication & role guards)
 ## 🎯 Core Features & Problem Solving
 
 ### Auto-Company Onboarding
@@ -86,3 +166,14 @@ You should be given a fast local host URL (typically `http://localhost:5173`) to
 * `backend/dbs/` - Prisma initialization and database hook configurations.
 * `backend/middleware/` - Auth decoders and Role Guards.
 * `backend/logs/` - Auto-generated folders where our global `winston` logger dumps runtime HTTP flows and Exception stacks (`all.log`, `error.log`).
+
+## 🎥 Demo
+
+🚀 Experience the application in action:
+
+<p align="center">
+  <a href="https://drive.google.com/file/d/13fo2cKvCXeSlgjeDb1VuIbE5LeENJyAA/view?usp=drive_link">
+    <img src="https://img.shields.io/badge/Watch-Demo-blue?style=for-the-badge&logo=google-drive" />
+  </a>
+</p>
+
